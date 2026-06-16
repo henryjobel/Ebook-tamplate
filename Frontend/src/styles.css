@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: "Noto Sans Bengali", "Hind Siliguri", "Segoe UI", system-ui, sans-serif;
+  color: #18211d;
+  background: #f7f3ea;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #f7f3ea;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+@layer base {
+  input,
+  textarea,
+  select {
+    @apply w-full rounded-md border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10;
+  }
+
+  textarea {
+    @apply min-h-28 resize-y;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-md bg-[#f97316] px-5 py-3 font-black text-white shadow-[0_14px_28px_rgba(249,115,22,0.26)] transition hover:bg-[#ea580c] disabled:cursor-not-allowed disabled:opacity-70;
+  }
+
+  .section-kicker {
+    @apply text-sm font-black uppercase tracking-normal text-[#d65a31];
+  }
+
+  .book-cover {
+    @apply aspect-[0.72] overflow-hidden rounded-2xl bg-[#18130f] shadow-2xl;
+  }
+
+  .book-cover img {
+    @apply h-full w-full object-cover;
+  }
+
+  .pay-tab {
+    @apply rounded-md border border-slate-200 bg-white px-4 py-3 font-black text-slate-600 transition hover:bg-slate-50;
+  }
+
+  .pay-tab-active {
+    @apply border-orange-500 bg-orange-50 text-orange-700 ring-4 ring-orange-500/10;
+  }
+
+  .status-pill {
+    @apply inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-black uppercase tracking-normal text-slate-600;
+  }
+
+  .status-pill.approved {
+    @apply bg-emerald-50 text-emerald-800;
+  }
+
+  .status-pill.rejected {
+    @apply bg-red-50 text-red-700;
+  }
+
+  .modal-panel {
+    animation: modalIn 180ms ease both;
+  }
+
+  .field-label {
+    @apply grid gap-2 text-sm font-black text-slate-700;
+  }
+
+  .table-action {
+    @apply inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 shadow-sm transition hover:bg-slate-50;
+  }
+}
+
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
