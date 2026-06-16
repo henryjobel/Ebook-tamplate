@@ -1,12 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import AdminDashboard from "./admin/AdminDashboard.jsx";
+import AdminCms from "./admin/AdminCms.jsx";
 import "./styles.css";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 const DEFAULT_CONTENT = {
   logoUrl: "",
+  faviconUrl: "",
+  seoImageUrl: "",
+  heroBannerUrl: "",
   authorPhotoUrl: "",
   guaranteeBadgeUrl: "",
   videoReviewUrl: "",
@@ -65,7 +69,12 @@ const DEFAULT_CONTENT = {
   ],
   finalHeadline: "এখনো ভাবছো? এই সুযোগ কিন্তু সীমিত সময়ের",
   finalText: "এই অফার শেষ হলে full price-এ কিনতে হবে।",
-  footerText: "Support: WhatsApp + Email | Privacy Policy | Refund Policy"
+  footerText: "Support: WhatsApp + Email | Privacy Policy | Refund Policy",
+  seoTitle: "বাংলা ইবুক | Premium Digital Guide",
+  seoDescription: "বাংলা ভাষায় তৈরি প্র্যাকটিক্যাল ইবুক, secure download এবং bKash/Nagad payment support সহ।",
+  seoKeywords: "বাংলা ইবুক, ebook, digital product, bkash, nagad",
+  seoCanonical: "",
+  customSections: []
 };
 
 function money(amount) {
@@ -74,6 +83,29 @@ function money(amount) {
     currency: "BDT",
     maximumFractionDigits: 0
   }).format(amount || 0);
+}
+
+function setMeta(name, content, property = false) {
+  if (!content) return;
+  const selector = property ? `meta[property="${name}"]` : `meta[name="${name}"]`;
+  let tag = document.querySelector(selector);
+  if (!tag) {
+    tag = document.createElement("meta");
+    tag.setAttribute(property ? "property" : "name", name);
+    document.head.appendChild(tag);
+  }
+  tag.setAttribute("content", content);
+}
+
+function setLink(rel, href) {
+  if (!href) return;
+  let tag = document.querySelector(`link[rel="${rel}"]`);
+  if (!tag) {
+    tag = document.createElement("link");
+    tag.setAttribute("rel", rel);
+    document.head.appendChild(tag);
+  }
+  tag.setAttribute("href", href);
 }
 
 function App() {
@@ -85,7 +117,7 @@ function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  if (route.startsWith("#/admin/cms")) return <Admin />;
+  if (route.startsWith("#/admin/cms")) return <AdminCms apiUrl={API_URL} />;
   return route.startsWith("#/admin") ? <AdminDashboard apiUrl={API_URL} money={money} /> : <Landing />;
 }
 
@@ -111,6 +143,7 @@ function Landing() {
   const [data, setData] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  const [cartHasItem, setCartHasItem] = useState(false);
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -138,10 +171,34 @@ function Landing() {
   const originalPrice = price + 700;
   const bumpPrice = 99;
   const totalPrice = price + (form.orderBump ? bumpPrice : 0);
+  const content = { ...DEFAULT_CONTENT, ...(data?.content || {}) };
+  const logoSrc = content.logoUrl ? `${API_URL}${content.logoUrl}` : "";
   const paymentNumber = useMemo(() => {
     if (!data) return "";
     return form.method === "bkash" ? data.payment.bkashNumber : data.payment.nagadNumber;
   }, [data, form.method]);
+
+  useEffect(() => {
+    if (!data) return;
+    const seoTitle = content.seoTitle || content.heroHeadline || data.ebook.title;
+    const seoDescription = content.seoDescription || content.heroSubheadline || data.ebook.description;
+    const seoImage = content.seoImageUrl ? `${API_URL}${content.seoImageUrl}` : (data.ebook.coverUrl ? `${API_URL}${data.ebook.coverUrl}` : "");
+    const favicon = content.faviconUrl ? `${API_URL}${content.faviconUrl}` : logoSrc;
+
+    document.title = seoTitle;
+    setMeta("description", seoDescription);
+    setMeta("keywords", content.seoKeywords);
+    setMeta("og:title", seoTitle, true);
+    setMeta("og:description", seoDescription, true);
+    setMeta("og:type", "website", true);
+    setMeta("og:image", seoImage, true);
+    setMeta("twitter:card", "summary_large_image");
+    setMeta("twitter:title", seoTitle);
+    setMeta("twitter:description", seoDescription);
+    setMeta("twitter:image", seoImage);
+    setLink("icon", favicon);
+    setLink("canonical", content.seoCanonical);
+  }, [content, data, logoSrc]);
 
   async function submitOrder(event) {
     event.preventDefault();
@@ -166,6 +223,8 @@ function Landing() {
 
     setMessage(`অর্ডার জমা হয়েছে। অর্ডার আইডি: ${result.orderId}`);
     setForm({ name: "", phone: "", email: "", method: "bkash", transactionId: "", orderBump: false });
+    setCartHasItem(false);
+    setCartOpen(false);
   }
 
   if (!data) {
@@ -189,9 +248,6 @@ function Landing() {
     );
   }
 
-  const content = { ...DEFAULT_CONTENT, ...(data.content || {}) };
-  const logoSrc = content.logoUrl ? `${API_URL}${content.logoUrl}` : "";
-
   const cta = (label = `${content.stickyCta} - ${money(price)} মাত্র`) => (
     <button className="btn-primary" onClick={() => setModalOpen(true)}>
       {label}
@@ -209,12 +265,18 @@ function Landing() {
   const bonuses = (Array.isArray(content.bonuses) ? content.bonuses : DEFAULT_CONTENT.bonuses)
     .map((item) => Array.isArray(item) ? { title: item[0], text: item[1], value: item[2] } : item);
   const faqs = Array.isArray(content.faqs) ? content.faqs : DEFAULT_CONTENT.faqs;
+  const customSections = Array.isArray(content.customSections) ? content.customSections : [];
   const totalValue = originalPrice + bonuses.reduce((sum, item) => sum + Number(item.value || 0), 0);
   const productImage = data.ebook.coverUrl ? `${API_URL}${data.ebook.coverUrl}` : "";
 
   function openCheckout() {
     setCartOpen(false);
     setModalOpen(true);
+  }
+
+  function addToCart() {
+    setCartHasItem(true);
+    setCartOpen(true);
   }
 
   return (
@@ -244,7 +306,7 @@ function Landing() {
           </div>
           <button className="relative rounded-md border border-orange-200 bg-white px-4 py-2 text-sm font-black text-orange-700 shadow-sm" onClick={() => setCartOpen(true)}>
             Cart
-            <span className="ml-2 inline-grid h-5 w-5 place-items-center rounded-full bg-orange-600 text-xs text-white">1</span>
+            <span className="ml-2 inline-grid h-5 w-5 place-items-center rounded-full bg-orange-600 text-xs text-white">{cartHasItem ? 1 : 0}</span>
           </button>
         </nav>
       </header>
@@ -260,7 +322,7 @@ function Landing() {
           </p>
           <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
             {cta(`${content.heroCta} - মাত্র ${money(price)}`)}
-            <button className="rounded-md border border-orange-300 bg-white px-6 py-3 font-black text-orange-700 shadow-sm" onClick={() => setCartOpen(true)}>
+            <button className="rounded-md border border-orange-300 bg-white px-6 py-3 font-black text-orange-700 shadow-sm" onClick={addToCart}>
               কার্টে যোগ করুন
             </button>
             <div>
@@ -299,7 +361,7 @@ function Landing() {
                   <p>✓ Bonus checklist included</p>
                   <p>✓ ১৪ দিনের guarantee</p>
                 </div>
-                <button className="btn-primary mt-8 w-full" onClick={() => setCartOpen(true)}>
+                <button className="btn-primary mt-8 w-full" onClick={addToCart}>
                   Add to cart
                 </button>
               </div>
@@ -314,9 +376,21 @@ function Landing() {
         description={data.ebook.description}
         price={price}
         originalPrice={originalPrice}
-        onCart={() => setCartOpen(true)}
+        onCart={addToCart}
         onBuy={openCheckout}
       />
+
+      {content.heroBannerUrl && (
+        <section className="px-5 pb-10 sm:px-8">
+          <div className="mx-auto max-w-7xl overflow-hidden rounded-3xl shadow-xl">
+            <img className="h-auto w-full object-cover" src={`${API_URL}${content.heroBannerUrl}`} alt={content.heroHeadline} />
+          </div>
+        </section>
+      )}
+
+      {customSections.map((section, index) => (
+        <CustomLandingSection section={section} key={`${section.type}-${index}`} />
+      ))}
 
       <SalesSection id="for" kicker="Who is this for?" title={content.whoForTitle}>
         <div className="grid gap-3 md:grid-cols-2">
@@ -554,6 +628,7 @@ function Landing() {
           setForm={setForm}
           bumpPrice={bumpPrice}
           totalPrice={totalPrice}
+          cartHasItem={cartHasItem}
           onClose={() => setCartOpen(false)}
           onCheckout={openCheckout}
         />
@@ -647,7 +722,51 @@ function TrustMini({ title, text }) {
   );
 }
 
-function CartDrawer({ title, productImage, price, originalPrice, form, setForm, bumpPrice, totalPrice, onClose, onCheckout }) {
+function CustomLandingSection({ section }) {
+  const imageUrl = section.imageUrl ? `${API_URL}${section.imageUrl}` : "";
+
+  if (section.type === "hero-banner") {
+    return (
+      <section className="px-5 py-12 sm:px-8">
+        <div className="mx-auto grid max-w-7xl overflow-hidden rounded-3xl bg-[#18130f] text-white lg:grid-cols-[1fr_0.9fr]">
+          <div className="p-8 lg:p-12">
+            <p className="section-kicker text-orange-300">{section.kicker || "Featured"}</p>
+            <h2 className="mt-3 text-4xl font-black leading-tight">{section.title || "Custom hero banner"}</h2>
+            <p className="mt-4 max-w-2xl text-lg font-semibold leading-8 text-white/70">{section.text}</p>
+          </div>
+          {imageUrl && <img className="h-full min-h-72 w-full object-cover" src={imageUrl} alt={section.title || "Custom section"} />}
+        </div>
+      </section>
+    );
+  }
+
+  if (section.type === "faq") {
+    return (
+      <SalesSection kicker={section.kicker || "FAQ"} title={section.title || "More questions"}>
+        <Faq title={section.question || "Question"}>{section.answer || section.text}</Faq>
+      </SalesSection>
+    );
+  }
+
+  if (section.type === "cta") {
+    return <CtaStrip text={section.title || "Ready to start?"} action={<a className="btn-primary" href="#checkout">{section.buttonText || "Checkout"}</a>} dark />;
+  }
+
+  return (
+    <section className="px-5 py-12 sm:px-8">
+      <div className="mx-auto grid max-w-7xl gap-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:grid-cols-[0.9fr_1.1fr]">
+        {imageUrl && <img className="h-full max-h-96 w-full rounded-2xl object-cover" src={imageUrl} alt={section.title || "Custom section"} />}
+        <div className={!imageUrl ? "md:col-span-2" : ""}>
+          <p className="section-kicker">{section.kicker || section.type || "Section"}</p>
+          <h2 className="mt-3 text-4xl font-black leading-tight">{section.title || "Custom section"}</h2>
+          <p className="mt-4 text-lg font-semibold leading-8 text-slate-600">{section.text}</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CartDrawer({ title, productImage, price, originalPrice, form, setForm, bumpPrice, totalPrice, cartHasItem, onClose, onCheckout }) {
   return (
     <div className="fixed inset-0 z-[65] bg-slate-950/55" onMouseDown={onClose}>
       <aside className="ml-auto flex h-full w-full max-w-md flex-col bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
@@ -660,29 +779,40 @@ function CartDrawer({ title, productImage, price, originalPrice, form, setForm, 
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
-          <div className="flex gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="h-24 w-20 shrink-0 overflow-hidden rounded-xl bg-[#18130f]">
-              {productImage ? <img className="h-full w-full object-cover" src={productImage} alt={title} /> : null}
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="font-black leading-6">{title}</h3>
-              <p className="mt-1 text-sm font-bold text-slate-500">Digital eBook</p>
-              <div className="mt-3 flex items-center gap-2">
-                <span className="text-xl font-black text-orange-600">{money(price)}</span>
-                <span className="text-sm font-bold text-slate-400 line-through">{money(originalPrice)}</span>
+          {!cartHasItem ? (
+            <div className="grid min-h-72 place-items-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+              <div>
+                <p className="text-2xl font-black">Cart empty</p>
+                <p className="mt-2 text-sm font-bold text-slate-500">Product add korle ekhane order summary dekhabe.</p>
               </div>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="flex gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="h-24 w-20 shrink-0 overflow-hidden rounded-xl bg-[#18130f]">
+                  {productImage ? <img className="h-full w-full object-cover" src={productImage} alt={title} /> : null}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-black leading-6">{title}</h3>
+                  <p className="mt-1 text-sm font-bold text-slate-500">Digital eBook</p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="text-xl font-black text-orange-600">{money(price)}</span>
+                    <span className="text-sm font-bold text-slate-400 line-through">{money(originalPrice)}</span>
+                  </div>
+                </div>
+              </div>
 
-          <label className="mt-4 flex gap-3 rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm font-bold text-orange-950">
-            <input
-              className="mt-1 h-5 w-5 rounded border-slate-300 p-0"
-              type="checkbox"
-              checked={form.orderBump}
-              onChange={(event) => setForm({ ...form, orderBump: event.target.checked })}
-            />
-            <span>Resource Pack add করুন - {money(bumpPrice)} extra</span>
-          </label>
+              <label className="mt-4 flex gap-3 rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm font-bold text-orange-950">
+                <input
+                  className="mt-1 h-5 w-5 rounded border-slate-300 p-0"
+                  type="checkbox"
+                  checked={form.orderBump}
+                  onChange={(event) => setForm({ ...form, orderBump: event.target.checked })}
+                />
+                <span>Resource Pack add করুন - {money(bumpPrice)} extra</span>
+              </label>
+            </>
+          )}
         </div>
 
         <div className="border-t border-slate-200 p-5">
@@ -691,7 +821,7 @@ function CartDrawer({ title, productImage, price, originalPrice, form, setForm, 
             {form.orderBump && <div className="flex justify-between"><span>Resource Pack</span><span>{money(bumpPrice)}</span></div>}
             <div className="flex justify-between border-t border-slate-200 pt-3 text-xl font-black text-[#18130f]"><span>Total</span><span>{money(totalPrice)}</span></div>
           </div>
-          <button className="btn-primary mt-5 h-14 w-full" onClick={onCheckout}>Proceed to checkout</button>
+          <button className="btn-primary mt-5 h-14 w-full" disabled={!cartHasItem} onClick={onCheckout}>Proceed to checkout</button>
           <button className="mt-3 h-12 w-full rounded-md border border-slate-200 font-black text-slate-600" onClick={onClose}>Continue shopping</button>
         </div>
       </aside>
@@ -947,6 +1077,7 @@ function Admin() {
           </CmsPanel>
 
           <CmsPanel title="Hero Section">
+            <Field label="Hero banner image upload"><input name="heroBannerImage" type="file" accept="image/*" /></Field>
             <CmsText label="Hero kicker" value={content.heroKicker} onChange={(value) => updateContent("heroKicker", value)} />
             <CmsText label="Hero headline" value={content.heroHeadline} onChange={(value) => updateContent("heroHeadline", value)} />
             <CmsText label="Hero subheadline" textarea value={content.heroSubheadline} onChange={(value) => updateContent("heroSubheadline", value)} />
@@ -1024,6 +1155,13 @@ function Admin() {
           <CmsPanel title="Final CTA">
             <CmsText label="Final headline" value={content.finalHeadline} onChange={(value) => updateContent("finalHeadline", value)} />
             <CmsText label="Final text" textarea value={content.finalText} onChange={(value) => updateContent("finalText", value)} />
+          </CmsPanel>
+
+          <CmsPanel title="Add / Manage Custom Sections">
+            <p className="text-sm font-bold leading-6 text-slate-500">
+              Section type choose korun: hero-banner, text, faq, cta. Image upload korle `Backend/uploads` folder-e save hobe.
+            </p>
+            <CustomSectionEditor items={content.customSections || []} onChange={(items) => updateContent("customSections", items)} />
           </CmsPanel>
 
           <button className="btn-primary sticky bottom-4 z-10 h-14 w-full text-base">সব পরিবর্তন সেভ করুন</button>
@@ -1175,6 +1313,54 @@ function TestimonialEditor({ items, onChange }) {
       ))}
       <button className="rounded-md border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-black text-orange-800" type="button" onClick={() => onChange([...items, { name: "", city: "", text: "", imageUrl: "" }])}>
         Add testimonial
+      </button>
+    </div>
+  );
+}
+
+function CustomSectionEditor({ items, onChange }) {
+  const updateItem = (index, key, value) => {
+    onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
+  };
+
+  const removeItem = (index) => {
+    onChange(items.filter((_item, itemIndex) => itemIndex !== index));
+  };
+
+  return (
+    <div className="grid gap-3">
+      {items.map((item, index) => (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3" key={`custom-section-${index}`}>
+          <div className="grid gap-3 md:grid-cols-3">
+            <Field label="Section type">
+              <select value={item.type || "text"} onChange={(event) => updateItem(index, "type", event.target.value)}>
+                <option value="hero-banner">Hero banner</option>
+                <option value="text">Text block</option>
+                <option value="faq">FAQ</option>
+                <option value="cta">CTA strip</option>
+              </select>
+            </Field>
+            <Field label="Kicker"><input value={item.kicker || ""} onChange={(event) => updateItem(index, "kicker", event.target.value)} /></Field>
+            {index < 6 && <Field label="Section image"><input name={`customSectionImage${index}`} type="file" accept="image/*" /></Field>}
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <Field label="Title"><input value={item.title || ""} onChange={(event) => updateItem(index, "title", event.target.value)} /></Field>
+            <Field label="Button text / FAQ question"><input value={item.buttonText || item.question || ""} onChange={(event) => item.type === "faq" ? updateItem(index, "question", event.target.value) : updateItem(index, "buttonText", event.target.value)} /></Field>
+          </div>
+          <div className="mt-3">
+            <Field label="Text / FAQ answer"><textarea value={item.answer || item.text || ""} onChange={(event) => item.type === "faq" ? updateItem(index, "answer", event.target.value) : updateItem(index, "text", event.target.value)} /></Field>
+          </div>
+          <button className="mt-3 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm font-black text-red-700" type="button" onClick={() => removeItem(index)}>
+            Delete section
+          </button>
+        </div>
+      ))}
+      <button
+        className="rounded-md border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-black text-orange-800"
+        type="button"
+        onClick={() => onChange([...items, { type: "text", kicker: "", title: "", text: "", imageUrl: "" }])}
+      >
+        Add new section
       </button>
     </div>
   );

@@ -66,11 +66,12 @@
     }
   ],
   "content": {
-    "logoUrl": "",
+    "logoUrl": "/uploads/1781605058561-ChatGPT-Image-Jun-16--2026--01_34_12-PM.png",
+    "heroBannerUrl": "",
     "authorPhotoUrl": "",
     "guaranteeBadgeUrl": "",
     "videoReviewUrl": "",
-    "brandName": "ইবুক স্টোর",
+    "brandName": "Learn Ai with Sadhin",
     "trustLine": "৩,৫০০+ মানুষ ইতোমধ্যে পড়েছেন ⭐⭐⭐⭐⭐",
     "stickyCta": "এখনই নাও",
     "heroKicker": "Limited Time Bangla eBook",
@@ -173,7 +174,14 @@
     ],
     "finalHeadline": "এখনো ভাবছো? এই সুযোগ কিন্তু সীমিত সময়ের",
     "finalText": "এই অফার শেষ হলে full price-এ কিনতে হবে।",
-    "footerText": "Support: WhatsApp + Email | Privacy Policy | Refund Policy"
+    "footerText": "Support: WhatsApp + Email | Privacy Policy | Refund Policy",
+    "customSections": [],
+    "faviconUrl": "",
+    "seoImageUrl": "",
+    "seoTitle": "",
+    "seoDescription": "",
+    "seoKeywords": "",
+    "seoCanonical": ""
   },
   "products": [
     {
@@ -195,9 +203,9 @@
       "imageUrl": "/uploads/1781602865713-1--we--1-.png",
       "fileName": "",
       "originalFileName": "",
-      "status": "archived",
+      "status": "active",
       "createdAt": "2026-06-16T09:41:05.717Z",
-      "updatedAt": "2026-06-16T09:41:35.490Z"
+      "updatedAt": "2026-06-16T10:09:02.552Z"
     },
     {
       "id": "48256784-5c03-4751-89e1-edc1907cd542",

@@ -29,6 +29,9 @@ const jwtSecret = process.env.JWT_SECRET || "dev-secret";
 
 const defaultContent = {
   logoUrl: "",
+  faviconUrl: "",
+  seoImageUrl: "",
+  heroBannerUrl: "",
   authorPhotoUrl: "",
   guaranteeBadgeUrl: "",
   videoReviewUrl: "",
@@ -87,7 +90,12 @@ const defaultContent = {
   ],
   finalHeadline: "এখনো ভাবছো? এই সুযোগ কিন্তু সীমিত সময়ের",
   finalText: "এই অফার শেষ হলে full price-এ কিনতে হবে।",
-  footerText: "Support: WhatsApp + Email | Privacy Policy | Refund Policy"
+  footerText: "Support: WhatsApp + Email | Privacy Policy | Refund Policy",
+  seoTitle: "বাংলা ইবুক | Premium Digital Guide",
+  seoDescription: "বাংলা ভাষায় তৈরি প্র্যাকটিক্যাল ইবুক, secure download এবং bKash/Nagad payment support সহ।",
+  seoKeywords: "বাংলা ইবুক, ebook, digital product, bkash, nagad",
+  seoCanonical: "",
+  customSections: []
 };
 
 const sql = new DatabaseSync(sqlitePath);
@@ -365,6 +373,9 @@ app.put("/api/admin/settings", requireAdmin, upload.fields([
   { name: "ebookFile", maxCount: 1 },
   { name: "coverImage", maxCount: 1 },
   { name: "logoImage", maxCount: 1 },
+  { name: "faviconImage", maxCount: 1 },
+  { name: "seoImage", maxCount: 1 },
+  { name: "heroBannerImage", maxCount: 1 },
   { name: "authorImage", maxCount: 1 },
   { name: "guaranteeImage", maxCount: 1 },
   { name: "testimonialImage0", maxCount: 1 },
@@ -372,7 +383,13 @@ app.put("/api/admin/settings", requireAdmin, upload.fields([
   { name: "testimonialImage2", maxCount: 1 },
   { name: "testimonialImage3", maxCount: 1 },
   { name: "testimonialImage4", maxCount: 1 },
-  { name: "testimonialImage5", maxCount: 1 }
+  { name: "testimonialImage5", maxCount: 1 },
+  { name: "customSectionImage0", maxCount: 1 },
+  { name: "customSectionImage1", maxCount: 1 },
+  { name: "customSectionImage2", maxCount: 1 },
+  { name: "customSectionImage3", maxCount: 1 },
+  { name: "customSectionImage4", maxCount: 1 },
+  { name: "customSectionImage5", maxCount: 1 }
 ]), async (req, res) => {
   const db = await readDb();
   const { title, subtitle, description, price, bkashNumber, nagadNumber, instructions, contentJson } = req.body;
@@ -412,6 +429,18 @@ app.put("/api/admin/settings", requireAdmin, upload.fields([
     db.content.logoUrl = `/uploads/${req.files.logoImage[0].filename}`;
   }
 
+  if (req.files?.faviconImage?.[0]) {
+    db.content.faviconUrl = `/uploads/${req.files.faviconImage[0].filename}`;
+  }
+
+  if (req.files?.seoImage?.[0]) {
+    db.content.seoImageUrl = `/uploads/${req.files.seoImage[0].filename}`;
+  }
+
+  if (req.files?.heroBannerImage?.[0]) {
+    db.content.heroBannerUrl = `/uploads/${req.files.heroBannerImage[0].filename}`;
+  }
+
   if (req.files?.authorImage?.[0]) {
     db.content.authorPhotoUrl = `/uploads/${req.files.authorImage[0].filename}`;
   }
@@ -424,6 +453,13 @@ app.put("/api/admin/settings", requireAdmin, upload.fields([
     const file = req.files?.[`testimonialImage${index}`]?.[0];
     if (file && db.content.testimonials?.[index]) {
       db.content.testimonials[index].imageUrl = `/uploads/${file.filename}`;
+    }
+  }
+
+  for (let index = 0; index < 6; index += 1) {
+    const file = req.files?.[`customSectionImage${index}`]?.[0];
+    if (file && db.content.customSections?.[index]) {
+      db.content.customSections[index].imageUrl = `/uploads/${file.filename}`;
     }
   }
 
