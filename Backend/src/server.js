@@ -1,232 +1,50 @@
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
-import fsSync from "node:fs";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { DatabaseSync } from "node:sqlite";
 import jwt from "jsonwebtoken";
 import multer from "multer";
 
+import { connectDb } from "./db.js";
+import { getSettings } from "./models/Settings.js";
+import { Product } from "./models/Product.js";
+import { Order } from "./models/Order.js";
+import { mergeContent } from "./defaultContent.js";
+import { uploadImage, uploadPrivateFile, getSignedFileUrl } from "./lib/cloudinary.js";
+
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const rootDir = path.resolve(__dirname, "..");
-const dataDir = path.join(rootDir, "data");
-const uploadDir = path.join(rootDir, "uploads");
-const dbPath = path.join(dataDir, "db.json");
-const sqlitePath = path.join(dataDir, "store.sqlite");
-
-fsSync.mkdirSync(dataDir, { recursive: true });
-fsSync.mkdirSync(uploadDir, { recursive: true });
 
 const app = express();
 const port = Number(process.env.PORT || 5000);
 const jwtSecret = process.env.JWT_SECRET || "dev-secret";
+const allowedOrigins = String(process.env.CLIENT_URL || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
-const defaultContent = {
-  logoUrl: "",
-  faviconUrl: "",
-  seoImageUrl: "",
-  heroBannerUrl: "",
-  authorPhotoUrl: "",
-  guaranteeBadgeUrl: "",
-  videoReviewUrl: "",
-  brandName: "ইবুক স্টোর",
-  trustLine: "৩,৫০০+ মানুষ ইতোমধ্যে পড়েছেন ⭐⭐⭐⭐⭐",
-  stickyCta: "এখনই নাও",
-  heroKicker: "Limited Time Bangla eBook",
-  heroHeadline: "এলোমেলো শেখা বন্ধ করে এবার clear roadmap হাতে নাও",
-  heroSubheadline: "সহজ বাংলায় সাজানো practical guide, যাতে তুমি বুঝে বুঝে শুরু করতে পারো এবং দ্রুত action নিতে পারো।",
-  heroCta: "এখনই ডাউনলোড করুন",
-  whoForTitle: "এই বইটা তোমার জন্য যদি...",
-  whoFor: [
-    "তুমি যদি অনেক কিছু শুরু করেও শেষ করতে না পারো",
-    "তুমি যদি সহজ বাংলায় step-by-step গাইড চাও",
-    "তুমি যদি কোথা থেকে শুরু করবে বুঝতে না পারো",
-    "তুমি যদি কম সময়ে কাজের মতো ফলাফল চাও"
-  ],
-  painsTitle: "তুমি কি এই সমস্যায় ভুগছো?",
-  pains: [
-    "অনেক free content দেখে মাথা আরও বেশি confusing হয়ে যাচ্ছে",
-    "কী আগে শিখবে আর কী পরে শিখবে সেটা clear না",
-    "Action plan না থাকায় শুরু করলেও consistency থাকে না",
-    "ভুল resource follow করে সময় নষ্ট হচ্ছে"
-  ],
-  beforeAfterTitle: "এই বই পড়ার আগে ও পরে",
-  beforeAfter: [
-    { before: "এলোমেলো idea ও confusion", after: "clear roadmap ও priority" },
-    { before: "শুরু করেও মাঝপথে থেমে যাওয়া", after: "ছোট ছোট step-এ consistent progress" },
-    { before: "ভুল জায়গায় সময় নষ্ট", after: "যা দরকার শুধু সেটায় focus" }
-  ],
-  insideTitle: "এই বইয়ে তুমি যা পাবে",
-  inside: [
-    { title: "Foundation", text: "শুরু করার আগে কোন জিনিসগুলো পরিষ্কার করা দরকার" },
-    { title: "Roadmap", text: "কোন step আগে, কোন step পরে - সম্পূর্ণ sequence" },
-    { title: "Execution", text: "প্রতিদিন কী করলে progress হবে তার practical guide" }
-  ],
-  authorName: "Sadhin / Rayshani",
-  authorBio: "প্র্যাকটিক্যাল learning material, checklist এবং simple explanation দিয়ে beginner-friendly guide তৈরি করা হয়।",
-  authorBadges: ["Practical Guide", "Bangla Content", "Action Checklist"],
-  ratingTitle: "৪.৯/৫ ⭐ — ৩,৫০০+ Reviews",
-  testimonials: [
-    { name: "আরিফ হাসান", city: "ঢাকা", text: "এই বইটা পড়ার পর পুরো roadmap বুঝেছি।" },
-    { name: "নুসরাত জাহান", city: "চট্টগ্রাম", text: "বাংলায় এত structured guide আশা করিনি।" }
-  ],
-  bonuses: [
-    { title: "Action Checklist", text: "প্রতিদিন follow করার ready checklist", value: 499 },
-    { title: "Worksheet Pack", text: "নিজের plan সাজানোর printable worksheet", value: 299 },
-    { title: "Mini Guide", text: "Common mistake এড়ানোর quick guide", value: 199 }
-  ],
-  guaranteeTitle: "১৪ দিনের Money-Back Guarantee",
-  guaranteeText: "যদি সন্তুষ্ট না হও, কোনো প্রশ্ন ছাড়াই পুরো টাকা ফেরত।",
-  faqTitle: "কেনার আগে সাধারণ প্রশ্ন",
-  faqs: [
-    { q: "এই বইটা কি আমার কাজে আসবে?", a: "তুমি যদি বাংলায় clear roadmap ও practical checklist চাও, তাহলে কাজে আসবে।" },
-    { q: "eBook কীভাবে পাবো?", a: "পেমেন্ট verify হলে secure download link পাওয়া যাবে।" }
-  ],
-  finalHeadline: "এখনো ভাবছো? এই সুযোগ কিন্তু সীমিত সময়ের",
-  finalText: "এই অফার শেষ হলে full price-এ কিনতে হবে।",
-  footerText: "Support: WhatsApp + Email | Privacy Policy | Refund Policy",
-  seoTitle: "বাংলা ইবুক | Premium Digital Guide",
-  seoDescription: "বাংলা ভাষায় তৈরি প্র্যাকটিক্যাল ইবুক, secure download এবং bKash/Nagad payment support সহ।",
-  seoKeywords: "বাংলা ইবুক, ebook, digital product, bkash, nagad",
-  seoCanonical: "",
-  customSections: []
-};
-
-const sql = new DatabaseSync(sqlitePath);
-sql.exec(`
-  CREATE TABLE IF NOT EXISTS products (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    type TEXT NOT NULL,
-    price REAL NOT NULL DEFAULT 0,
-    originalPrice REAL NOT NULL DEFAULT 0,
-    description TEXT NOT NULL DEFAULT '',
-    stock INTEGER,
-    sku TEXT NOT NULL DEFAULT '',
-    shippingCharge REAL NOT NULL DEFAULT 0,
-    deliveryOptions TEXT NOT NULL DEFAULT '[]',
-    deliveryNote TEXT NOT NULL DEFAULT '',
-    imageUrl TEXT NOT NULL DEFAULT '',
-    fileName TEXT NOT NULL DEFAULT '',
-    originalFileName TEXT NOT NULL DEFAULT '',
-    status TEXT NOT NULL DEFAULT 'active',
-    createdAt TEXT NOT NULL,
-    updatedAt TEXT NOT NULL DEFAULT ''
-  )
-`);
-
-function rowToProduct(row) {
-  return {
-    ...row,
-    deliveryOptions: JSON.parse(row.deliveryOptions || "[]")
-  };
+function isLocalDevOrigin(origin) {
+  try {
+    return origin && ["localhost", "127.0.0.1"].includes(new URL(origin).hostname);
+  } catch {
+    return false;
+  }
 }
 
-function listProducts() {
-  return sql.prepare("SELECT * FROM products ORDER BY createdAt DESC").all().map(rowToProduct);
-}
-
-function insertProduct(product) {
-  sql.prepare(`
-    INSERT INTO products (
-      id, title, type, price, originalPrice, description, stock, sku,
-      shippingCharge, deliveryOptions, deliveryNote, imageUrl, fileName,
-      originalFileName, status, createdAt, updatedAt
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    product.id,
-    product.title,
-    product.type,
-    product.price,
-    product.originalPrice,
-    product.description,
-    product.stock,
-    product.sku,
-    product.shippingCharge,
-    JSON.stringify(product.deliveryOptions || []),
-    product.deliveryNote,
-    product.imageUrl,
-    product.fileName,
-    product.originalFileName,
-    product.status,
-    product.createdAt,
-    product.updatedAt || ""
-  );
-}
-
-app.use(cors({ origin: process.env.CLIENT_URL || true }));
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || isLocalDevOrigin(origin) || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error("Not allowed by CORS"));
+  }
+}));
 app.use(express.json({ limit: "2mb" }));
 
-const storage = multer.diskStorage({
-  destination: async (_req, _file, cb) => {
-    await fs.mkdir(uploadDir, { recursive: true });
-    cb(null, uploadDir);
-  },
-  filename: (_req, file, cb) => {
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "-");
-    cb(null, `${Date.now()}-${safeName}`);
-  }
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 60 * 1024 * 1024 }
 });
-
-async function ensureDb() {
-  await fs.mkdir(dataDir, { recursive: true });
-  await fs.mkdir(uploadDir, { recursive: true });
-  try {
-    await fs.access(dbPath);
-  } catch {
-    const initial = {
-      ebook: {
-        title: "বাংলা ইবুক",
-        subtitle: "আপনার জ্ঞান, এক জায়গায় সুন্দরভাবে সাজানো",
-        description:
-          "এই ইবুকে ধাপে ধাপে শেখার মতো করে গুরুত্বপূর্ণ বিষয়গুলো সাজানো হয়েছে। পেমেন্ট করার পর এডমিন অনুমোদন দিলে ডাউনলোড লিংক পাওয়া যাবে।",
-        price: 499,
-        coverUrl: "",
-        fileName: "",
-        originalFileName: ""
-      },
-      payment: {
-        bkashNumber: "01XXXXXXXXX",
-        nagadNumber: "01XXXXXXXXX",
-        instructions:
-          "Send Money করুন, তারপর আপনার Transaction ID দিয়ে অর্ডার সাবমিট করুন।"
-      },
-      content: defaultContent,
-      products: [],
-      orders: []
-    };
-    await fs.writeFile(dbPath, JSON.stringify(initial, null, 2));
-  }
-}
-
-async function readDb() {
-  await ensureDb();
-  const db = JSON.parse(await fs.readFile(dbPath, "utf8"));
-  db.content = { ...defaultContent, ...(db.content || {}) };
-  db.products = listProducts();
-  db.orders = (db.orders || []).map((order) => ({
-    deliveryStatus: order.deliveryStatus || "not_required",
-    trackingNumber: order.trackingNumber || "",
-    deliveryNote: order.deliveryNote || "",
-    ...order
-  }));
-  return db;
-}
-
-async function writeDb(db) {
-  await fs.writeFile(dbPath, JSON.stringify(db, null, 2));
-}
 
 function publicEbook(ebook) {
   return {
@@ -234,20 +52,21 @@ function publicEbook(ebook) {
     subtitle: ebook.subtitle,
     description: ebook.description,
     price: ebook.price,
+    originalPrice: ebook.originalPrice,
     coverUrl: ebook.coverUrl,
-    hasFile: Boolean(ebook.fileName)
+    hasFile: Boolean(ebook.filePublicId)
   };
 }
 
 function requireAdmin(req, res, next) {
   const token = req.headers.authorization?.replace("Bearer ", "");
-  if (!token) return res.status(401).json({ message: "লগইন প্রয়োজন" });
+  if (!token) return res.status(401).json({ message: "লগইন প্রয়োজন" });
 
   try {
     req.admin = jwt.verify(token, jwtSecret);
     next();
   } catch {
-    res.status(401).json({ message: "সেশন শেষ হয়েছে, আবার লগইন করুন" });
+    res.status(401).json({ message: "সেশন শেষ হয়েছে, আবার লগইন করুন" });
   }
 }
 
@@ -257,13 +76,23 @@ function createDownloadToken(orderId) {
   });
 }
 
+async function uploadIfPresent(req, fieldName) {
+  const file = req.files?.[fieldName]?.[0];
+  if (!file) return null;
+  return uploadImage(file.buffer, "ebook-store");
+}
+
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
 
 app.get("/api/ebook", async (_req, res) => {
-  const db = await readDb();
-  res.json({ ebook: publicEbook(db.ebook), payment: db.payment, content: db.content });
+  const settings = await getSettings();
+  res.json({
+    ebook: publicEbook(settings.ebook),
+    payment: settings.payment,
+    content: mergeContent(settings.content)
+  });
 });
 
 app.post("/api/orders", async (req, res) => {
@@ -276,23 +105,17 @@ app.post("/api/orders", async (req, res) => {
     return res.status(400).json({ message: "সঠিক পেমেন্ট মাধ্যম নির্বাচন করুন" });
   }
 
-  const db = await readDb();
-  const order = {
-    id: randomUUID(),
+  const settings = await getSettings();
+  const order = await Order.create({
     name,
     phone,
     email: email || "",
     method,
     transactionId,
-    amount: Number(amount || db.ebook.price),
-    orderBump: Boolean(orderBump),
-    status: "pending",
-    createdAt: new Date().toISOString(),
-    downloadToken: ""
-  };
+    amount: Number(amount || settings.ebook.price),
+    orderBump: Boolean(orderBump)
+  });
 
-  db.orders.unshift(order);
-  await writeDb(db);
   res.status(201).json({ orderId: order.id, status: order.status });
 });
 
@@ -302,21 +125,27 @@ app.post("/api/admin/login", async (req, res) => {
   const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
 
   if (email !== adminEmail || password !== adminPassword) {
-    return res.status(401).json({ message: "ইমেইল বা পাসওয়ার্ড সঠিক নয়" });
+    return res.status(401).json({ message: "ইমেইল বা পাসওয়ার্ড সঠিক নয়" });
   }
 
   const token = jwt.sign({ email, role: "admin" }, jwtSecret, { expiresIn: "12h" });
-  const db = await readDb();
-  res.json({ token, ebook: db.ebook, payment: db.payment, content: db.content });
+  const settings = await getSettings();
+  res.json({
+    token,
+    ebook: settings.ebook,
+    payment: settings.payment,
+    content: mergeContent(settings.content)
+  });
 });
 
 app.get("/api/admin/orders", requireAdmin, async (_req, res) => {
-  const db = await readDb();
-  res.json({ orders: db.orders });
+  const orders = await Order.find().sort({ createdAt: -1 });
+  res.json({ orders });
 });
 
 app.get("/api/admin/products", requireAdmin, async (_req, res) => {
-  res.json({ products: listProducts() });
+  const products = await Product.find().sort({ createdAt: -1 });
+  res.json({ products });
 });
 
 app.post("/api/admin/products", requireAdmin, upload.fields([
@@ -326,11 +155,10 @@ app.post("/api/admin/products", requireAdmin, upload.fields([
   const { title, type, price, originalPrice, description, stock, sku, shippingCharge, deliveryOptions, deliveryNote } = req.body;
 
   if (!title || !["ebook", "physical"].includes(type)) {
-    return res.status(400).json({ message: "Product title এবং type প্রয়োজন" });
+    return res.status(400).json({ message: "Product title এবং type প্রয়োজন" });
   }
 
   const product = {
-    id: randomUUID(),
     title,
     type,
     price: Number(price || 0),
@@ -341,32 +169,46 @@ app.post("/api/admin/products", requireAdmin, upload.fields([
     shippingCharge: type === "physical" ? Number(shippingCharge || 0) : 0,
     deliveryOptions: type === "physical" ? String(deliveryOptions || "").split(",").map((item) => item.trim()).filter(Boolean) : ["Digital download"],
     deliveryNote: deliveryNote || "",
-    imageUrl: req.files?.productImage?.[0] ? `/uploads/${req.files.productImage[0].filename}` : "",
-    fileName: req.files?.productFile?.[0] ? req.files.productFile[0].filename : "",
-    originalFileName: req.files?.productFile?.[0] ? req.files.productFile[0].originalname : "",
-    status: "active",
-    createdAt: new Date().toISOString()
+    status: "active"
   };
 
-  insertProduct(product);
-  res.status(201).json({ product });
+  const imageFile = req.files?.productImage?.[0];
+  if (imageFile) {
+    product.imageUrl = await uploadImage(imageFile.buffer, "ebook-store/products");
+  }
+
+  const productFile = req.files?.productFile?.[0];
+  if (productFile) {
+    const uploaded = await uploadPrivateFile(productFile.buffer, "ebook-store/files", productFile.originalname);
+    product.filePublicId = uploaded.publicId;
+    product.fileFormat = uploaded.format;
+    product.fileResourceType = uploaded.resourceType;
+    product.originalFileName = productFile.originalname;
+  }
+
+  const created = await Product.create(product);
+  res.status(201).json({ product: created });
 });
 
 app.patch("/api/admin/products/:id", requireAdmin, async (req, res) => {
-  const product = listProducts().find((item) => item.id === req.params.id);
-  if (!product) return res.status(404).json({ message: "Product পাওয়া যায়নি" });
+  const product = await Product.findById(req.params.id);
+  if (!product) return res.status(404).json({ message: "Product পাওয়া যায়নি" });
 
   if (req.body.status && ["active", "draft", "archived"].includes(req.body.status)) {
-    sql.prepare("UPDATE products SET status = ?, updatedAt = ? WHERE id = ?")
-      .run(req.body.status, new Date().toISOString(), req.params.id);
+    product.status = req.body.status;
+    await product.save();
   }
 
-  res.json({ product: listProducts().find((item) => item.id === req.params.id) });
+  res.json({ product });
 });
 
 app.get("/api/admin/settings", requireAdmin, async (_req, res) => {
-  const db = await readDb();
-  res.json({ ebook: db.ebook, payment: db.payment, content: db.content });
+  const settings = await getSettings();
+  res.json({
+    ebook: settings.ebook,
+    payment: settings.payment,
+    content: mergeContent(settings.content)
+  });
 });
 
 app.put("/api/admin/settings", requireAdmin, upload.fields([
@@ -389,88 +231,107 @@ app.put("/api/admin/settings", requireAdmin, upload.fields([
   { name: "customSectionImage2", maxCount: 1 },
   { name: "customSectionImage3", maxCount: 1 },
   { name: "customSectionImage4", maxCount: 1 },
-  { name: "customSectionImage5", maxCount: 1 }
+  { name: "customSectionImage5", maxCount: 1 },
+  { name: "v2AuthorImage", maxCount: 1 },
+  { name: "v2VideoTestimonialImage0", maxCount: 1 },
+  { name: "v2VideoTestimonialImage1", maxCount: 1 },
+  { name: "v2VideoTestimonialImage2", maxCount: 1 },
+  { name: "v2VideoTestimonialImage3", maxCount: 1 },
+  { name: "v2VideoTestimonialImage4", maxCount: 1 },
+  { name: "v2VideoTestimonialImage5", maxCount: 1 }
 ]), async (req, res) => {
-  const db = await readDb();
-  const { title, subtitle, description, price, bkashNumber, nagadNumber, instructions, contentJson } = req.body;
+  const settings = await getSettings();
+  const { title, subtitle, description, price, originalPrice, bkashNumber, nagadNumber, instructions, contentJson } = req.body;
 
-  db.ebook = {
-    ...db.ebook,
-    title: title || db.ebook.title,
-    subtitle: subtitle || db.ebook.subtitle,
-    description: description || db.ebook.description,
-    price: Number(price || db.ebook.price)
-  };
+  settings.ebook.title = title || settings.ebook.title;
+  settings.ebook.subtitle = subtitle || settings.ebook.subtitle;
+  settings.ebook.description = description || settings.ebook.description;
+  settings.ebook.price = Number(price || settings.ebook.price);
+  settings.ebook.originalPrice = Number(originalPrice || settings.ebook.originalPrice);
 
-  if (req.files?.ebookFile?.[0]) {
-    db.ebook.fileName = req.files.ebookFile[0].filename;
-    db.ebook.originalFileName = req.files.ebookFile[0].originalname;
+  const ebookFile = req.files?.ebookFile?.[0];
+  if (ebookFile) {
+    const uploaded = await uploadPrivateFile(ebookFile.buffer, "ebook-store/files", ebookFile.originalname);
+    settings.ebook.filePublicId = uploaded.publicId;
+    settings.ebook.fileFormat = uploaded.format;
+    settings.ebook.fileResourceType = uploaded.resourceType;
+    settings.ebook.originalFileName = ebookFile.originalname;
   }
 
-  if (req.files?.coverImage?.[0]) {
-    db.ebook.coverUrl = `/uploads/${req.files.coverImage[0].filename}`;
-  }
+  const coverUrl = await uploadIfPresent(req, "coverImage");
+  if (coverUrl) settings.ebook.coverUrl = coverUrl;
 
-  db.payment = {
-    bkashNumber: bkashNumber || db.payment.bkashNumber,
-    nagadNumber: nagadNumber || db.payment.nagadNumber,
-    instructions: instructions || db.payment.instructions
-  };
+  settings.payment.bkashNumber = bkashNumber || settings.payment.bkashNumber;
+  settings.payment.nagadNumber = nagadNumber || settings.payment.nagadNumber;
+  settings.payment.instructions = instructions || settings.payment.instructions;
 
+  let content = mergeContent(settings.content);
   if (contentJson) {
     try {
-      db.content = { ...defaultContent, ...JSON.parse(contentJson) };
+      content = mergeContent(JSON.parse(contentJson));
     } catch {
-      return res.status(400).json({ message: "Content JSON সঠিক নয়" });
+      return res.status(400).json({ message: "Content JSON সঠিক নয়" });
     }
   }
 
-  if (req.files?.logoImage?.[0]) {
-    db.content.logoUrl = `/uploads/${req.files.logoImage[0].filename}`;
-  }
+  const logoUrl = await uploadIfPresent(req, "logoImage");
+  if (logoUrl) content.logoUrl = logoUrl;
 
-  if (req.files?.faviconImage?.[0]) {
-    db.content.faviconUrl = `/uploads/${req.files.faviconImage[0].filename}`;
-  }
+  const faviconUrl = await uploadIfPresent(req, "faviconImage");
+  if (faviconUrl) content.faviconUrl = faviconUrl;
 
-  if (req.files?.seoImage?.[0]) {
-    db.content.seoImageUrl = `/uploads/${req.files.seoImage[0].filename}`;
-  }
+  const seoImageUrl = await uploadIfPresent(req, "seoImage");
+  if (seoImageUrl) content.seoImageUrl = seoImageUrl;
 
-  if (req.files?.heroBannerImage?.[0]) {
-    db.content.heroBannerUrl = `/uploads/${req.files.heroBannerImage[0].filename}`;
-  }
+  const heroBannerUrl = await uploadIfPresent(req, "heroBannerImage");
+  if (heroBannerUrl) content.heroBannerUrl = heroBannerUrl;
 
-  if (req.files?.authorImage?.[0]) {
-    db.content.authorPhotoUrl = `/uploads/${req.files.authorImage[0].filename}`;
-  }
+  const authorPhotoUrl = await uploadIfPresent(req, "authorImage");
+  if (authorPhotoUrl) content.authorPhotoUrl = authorPhotoUrl;
 
-  if (req.files?.guaranteeImage?.[0]) {
-    db.content.guaranteeBadgeUrl = `/uploads/${req.files.guaranteeImage[0].filename}`;
-  }
+  const guaranteeBadgeUrl = await uploadIfPresent(req, "guaranteeImage");
+  if (guaranteeBadgeUrl) content.guaranteeBadgeUrl = guaranteeBadgeUrl;
 
   for (let index = 0; index < 6; index += 1) {
-    const file = req.files?.[`testimonialImage${index}`]?.[0];
-    if (file && db.content.testimonials?.[index]) {
-      db.content.testimonials[index].imageUrl = `/uploads/${file.filename}`;
+    const url = await uploadIfPresent(req, `testimonialImage${index}`);
+    if (url && content.testimonials?.[index]) {
+      content.testimonials[index].imageUrl = url;
     }
   }
 
   for (let index = 0; index < 6; index += 1) {
-    const file = req.files?.[`customSectionImage${index}`]?.[0];
-    if (file && db.content.customSections?.[index]) {
-      db.content.customSections[index].imageUrl = `/uploads/${file.filename}`;
+    const url = await uploadIfPresent(req, `customSectionImage${index}`);
+    if (url && content.customSections?.[index]) {
+      content.customSections[index].imageUrl = url;
     }
   }
 
-  await writeDb(db);
-  res.json({ ebook: db.ebook, payment: db.payment, content: db.content });
+  const v2AuthorPhotoUrl = await uploadIfPresent(req, "v2AuthorImage");
+  if (v2AuthorPhotoUrl) content.v2.author.photoUrl = v2AuthorPhotoUrl;
+
+  for (let index = 0; index < 6; index += 1) {
+    const url = await uploadIfPresent(req, `v2VideoTestimonialImage${index}`);
+    if (url && content.v2.videoTestimonials?.[index]) {
+      content.v2.videoTestimonials[index].imageUrl = url;
+    }
+  }
+
+  settings.content = content;
+  settings.markModified("ebook");
+  settings.markModified("payment");
+  settings.markModified("content");
+  await settings.save();
+
+  res.json({
+    ebook: settings.ebook,
+    payment: settings.payment,
+    content: mergeContent(settings.content)
+  });
 });
 
 app.patch("/api/admin/orders/:id", requireAdmin, async (req, res) => {
-  const db = await readDb();
-  const order = db.orders.find((item) => item.id === req.params.id);
-  if (!order) return res.status(404).json({ message: "অর্ডার পাওয়া যায়নি" });
+  const order = await Order.findById(req.params.id);
+  if (!order) return res.status(404).json({ message: "অর্ডার পাওয়া যায়নি" });
 
   const status = req.body.status || order.status;
   if (!["approved", "rejected", "pending"].includes(status)) {
@@ -482,8 +343,7 @@ app.patch("/api/admin/orders/:id", requireAdmin, async (req, res) => {
   if (typeof req.body.trackingNumber === "string") order.trackingNumber = req.body.trackingNumber;
   if (typeof req.body.deliveryNote === "string") order.deliveryNote = req.body.deliveryNote;
   order.downloadToken = status === "approved" ? createDownloadToken(order.id) : "";
-  order.updatedAt = new Date().toISOString();
-  await writeDb(db);
+  await order.save();
 
   res.json({ order });
 });
@@ -496,18 +356,21 @@ app.get("/api/download/:token", async (req, res) => {
     return res.status(401).send("Download link expired");
   }
 
-  const db = await readDb();
-  const order = db.orders.find((item) => item.id === payload.orderId);
-  if (!order || order.status !== "approved" || !db.ebook.fileName) {
+  const order = await Order.findById(payload.orderId);
+  const settings = await getSettings();
+  if (!order || order.status !== "approved" || !settings.ebook.filePublicId) {
     return res.status(403).send("Download not available");
   }
 
-  res.download(path.join(uploadDir, db.ebook.fileName), db.ebook.originalFileName || db.ebook.fileName);
+  const signedUrl = getSignedFileUrl(
+    settings.ebook.filePublicId,
+    settings.ebook.fileFormat,
+    settings.ebook.fileResourceType
+  );
+  res.redirect(signedUrl);
 });
 
-app.use("/uploads", express.static(uploadDir));
-
-ensureDb().then(() => {
+connectDb().then(() => {
   app.listen(port, () => {
     console.log(`Ebook backend running on http://localhost:${port}`);
   });

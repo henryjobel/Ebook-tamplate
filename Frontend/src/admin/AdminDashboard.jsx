@@ -276,7 +276,7 @@ export default function AdminDashboard({ apiUrl, money }) {
                 <ProductForm product={product} setProduct={setProduct} createProduct={createProduct} loading={loading} message={message} />
               </Panel>
               <Panel title="Products" subtitle={`${products.length} products in catalog`}>
-                <ProductTable products={products} money={money} apiUrl={apiUrl} updateProductStatus={updateProductStatus} />
+                <ProductTable products={products} money={money} updateProductStatus={updateProductStatus} />
               </Panel>
             </div>
           )}
@@ -341,6 +341,9 @@ function SettingsForm({ settings, saveSettings, message }) {
           </label>
           <label className="field-label">Default price
             <input name="price" type="number" defaultValue={settings.ebook?.price || ""} />
+          </label>
+          <label className="field-label">Strike-through (original) price
+            <input name="originalPrice" type="number" defaultValue={settings.ebook?.originalPrice || ""} />
           </label>
         </div>
 
@@ -459,7 +462,7 @@ function ProductForm({ product, setProduct, createProduct, loading, message }) {
   );
 }
 
-function ProductTable({ products, money, apiUrl, updateProductStatus }) {
+function ProductTable({ products, money, updateProductStatus }) {
   if (products.length === 0) {
     return <EmptyState title="No products yet" text="Create an ebook or physical product to start managing inventory." />;
   }
@@ -477,7 +480,7 @@ function ProductTable({ products, money, apiUrl, updateProductStatus }) {
         <div className="grid min-w-[820px] grid-cols-[1.4fr_120px_120px_120px_180px] items-center border-t border-slate-200 bg-white px-4 py-3" key={item.id}>
           <div className="flex min-w-0 items-center gap-3">
             <div className="h-14 w-12 shrink-0 overflow-hidden rounded-lg bg-slate-900">
-              {item.imageUrl && <img className="h-full w-full object-cover" src={`${apiUrl}${item.imageUrl}`} alt={item.title} />}
+              {item.imageUrl && <img className="h-full w-full object-cover" src={item.imageUrl} alt={item.title} />}
             </div>
             <div className="min-w-0">
               <p className="truncate font-black">{item.title}</p>

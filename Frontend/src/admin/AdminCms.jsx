@@ -37,7 +37,36 @@ const fallbackContent = {
   faqs: [],
   finalHeadline: "",
   finalText: "",
-  customSections: []
+  customSections: [],
+  v2: {
+    heroPill: "",
+    heroGuaranteeBadge: "",
+    painsTitle: "",
+    painsSubtitle: "",
+    pains: [],
+    benefitsLabel: "",
+    benefitsTitle: "",
+    benefits: [],
+    ctaBanners: [],
+    author: { photoUrl: "", name: "", role: "", bio: "", stats: [] },
+    insideTitle: "",
+    insideSubtitle: "",
+    chapters: [],
+    testimonialsTitle: "",
+    ratingSummary: "",
+    videoTestimonials: [],
+    reviews: [],
+    faqTitle: "",
+    faqs: [],
+    guaranteeTitle: "",
+    guaranteeText: "",
+    finalHeadline: "",
+    finalSubtext: "",
+    finalCtaButtonText: "",
+    countdownSeconds: 0,
+    footer: { description: "", email: "", links: [], socials: [], copyright: "" },
+    upsells: []
+  }
 };
 
 const cmsNav = [
@@ -46,7 +75,8 @@ const cmsNav = [
   ["sections", "Sections"],
   ["proof", "Proof"],
   ["offer", "Offer"],
-  ["builder", "Builder"]
+  ["builder", "Builder"],
+  ["v2", "V2 Landing"]
 ];
 
 export default function AdminCms({ apiUrl }) {
@@ -80,7 +110,11 @@ export default function AdminCms({ apiUrl }) {
     }
     const result = await res.json();
     setSettings(result);
-    setContent({ ...fallbackContent, ...(result.content || {}) });
+    setContent({
+      ...fallbackContent,
+      ...(result.content || {}),
+      v2: { ...fallbackContent.v2, ...(result.content?.v2 || {}) }
+    });
   }
 
   async function doLogin(event) {
@@ -117,12 +151,27 @@ export default function AdminCms({ apiUrl }) {
     const result = await res.json();
     if (!res.ok) return setMessage(result.message || "CMS save failed");
     setSettings(result);
-    setContent({ ...fallbackContent, ...(result.content || {}) });
+    setContent({
+      ...fallbackContent,
+      ...(result.content || {}),
+      v2: { ...fallbackContent.v2, ...(result.content?.v2 || {}) }
+    });
     setMessage("CMS saved successfully");
   }
 
   function update(key, value) {
     setContent((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateV2(key, value) {
+    setContent((current) => ({ ...current, v2: { ...current.v2, [key]: value } }));
+  }
+
+  function updateV2Nested(parentKey, key, value) {
+    setContent((current) => ({
+      ...current,
+      v2: { ...current.v2, [parentKey]: { ...current.v2[parentKey], [key]: value } }
+    }));
   }
 
   if (!token) {
@@ -284,6 +333,84 @@ export default function AdminCms({ apiUrl }) {
             </Card>
           )}
 
+          {tab === "v2" && (
+            <CmsGrid>
+              <Card title="V2 Hero" subtitle="Frontend-v2 landing page hero pill and guarantee badge.">
+                <CmsText label="Hero pill text" value={content.v2.heroPill} onChange={(value) => updateV2("heroPill", value)} />
+                <CmsText label="Hero guarantee badge" value={content.v2.heroGuaranteeBadge} onChange={(value) => updateV2("heroGuaranteeBadge", value)} />
+              </Card>
+
+              <Card title="V2 Pain Points">
+                <CmsText label="Title" value={content.v2.painsTitle} onChange={(value) => updateV2("painsTitle", value)} />
+                <CmsText label="Subtitle" value={content.v2.painsSubtitle} onChange={(value) => updateV2("painsSubtitle", value)} />
+                <ObjectList items={content.v2.pains || []} fields={[["emoji", "Emoji"], ["text", "Text"]]} onChange={(items) => updateV2("pains", items)} />
+              </Card>
+
+              <Card title="V2 Benefits">
+                <CmsText label="Pill label" value={content.v2.benefitsLabel} onChange={(value) => updateV2("benefitsLabel", value)} />
+                <CmsText label="Title" value={content.v2.benefitsTitle} onChange={(value) => updateV2("benefitsTitle", value)} />
+                <TextList items={content.v2.benefits || []} onChange={(items) => updateV2("benefits", items)} />
+              </Card>
+
+              <Card title="V2 CTA Banners" subtitle="Two slim conversion banners shown between sections.">
+                <CtaBannerList items={content.v2.ctaBanners || []} onChange={(items) => updateV2("ctaBanners", items)} />
+              </Card>
+
+              <Card title="V2 Author">
+                <Upload label="Author photo" name="v2AuthorImage" />
+                <CmsText label="Name" value={content.v2.author.name} onChange={(value) => updateV2Nested("author", "name", value)} />
+                <CmsText label="Role" value={content.v2.author.role} onChange={(value) => updateV2Nested("author", "role", value)} />
+                <CmsText label="Bio" textarea value={content.v2.author.bio} onChange={(value) => updateV2Nested("author", "bio", value)} />
+                <ObjectList items={content.v2.author.stats || []} fields={[["value", "Stat value"], ["label", "Stat label"]]} onChange={(items) => updateV2Nested("author", "stats", items)} />
+              </Card>
+
+              <Card title="V2 Inside Book / Chapters">
+                <CmsText label="Title" value={content.v2.insideTitle} onChange={(value) => updateV2("insideTitle", value)} />
+                <CmsText label="Subtitle" value={content.v2.insideSubtitle} onChange={(value) => updateV2("insideSubtitle", value)} />
+                <ChapterList items={content.v2.chapters || []} onChange={(items) => updateV2("chapters", items)} />
+              </Card>
+
+              <Card title="V2 Testimonials">
+                <CmsText label="Title" value={content.v2.testimonialsTitle} onChange={(value) => updateV2("testimonialsTitle", value)} />
+                <CmsText label="Rating summary" value={content.v2.ratingSummary} onChange={(value) => updateV2("ratingSummary", value)} />
+                <p className="text-sm font-bold text-slate-500">Video testimonials</p>
+                <VideoTestimonialList items={content.v2.videoTestimonials || []} onChange={(items) => updateV2("videoTestimonials", items)} />
+                <p className="mt-2 text-sm font-bold text-slate-500">Written reviews</p>
+                <ReviewList items={content.v2.reviews || []} onChange={(items) => updateV2("reviews", items)} />
+              </Card>
+
+              <Card title="V2 Pricing Upsells" subtitle="Order-bump checkboxes shown on the V2 pricing card. Free bonuses reuse the shared Bonus Stack in the Offer tab.">
+                <UpsellList items={content.v2.upsells || []} onChange={(items) => updateV2("upsells", items)} />
+              </Card>
+
+              <Card title="V2 FAQ & Guarantee">
+                <CmsText label="Title" value={content.v2.faqTitle} onChange={(value) => updateV2("faqTitle", value)} />
+                <ObjectList items={content.v2.faqs || []} fields={[["q", "Question"], ["a", "Answer"]]} onChange={(items) => updateV2("faqs", items)} />
+                <CmsText label="Guarantee title" value={content.v2.guaranteeTitle} onChange={(value) => updateV2("guaranteeTitle", value)} />
+                <CmsText label="Guarantee text" textarea value={content.v2.guaranteeText} onChange={(value) => updateV2("guaranteeText", value)} />
+              </Card>
+
+              <Card title="V2 Final CTA">
+                <CmsText label="Headline" value={content.v2.finalHeadline} onChange={(value) => updateV2("finalHeadline", value)} />
+                <CmsText label="Subtext" textarea value={content.v2.finalSubtext} onChange={(value) => updateV2("finalSubtext", value)} />
+                <CmsText label="Button text" value={content.v2.finalCtaButtonText} onChange={(value) => updateV2("finalCtaButtonText", value)} />
+                <label className="field-label">Countdown duration (seconds)
+                  <input type="number" value={content.v2.countdownSeconds || 0} onChange={(event) => updateV2("countdownSeconds", Number(event.target.value))} />
+                </label>
+              </Card>
+
+              <Card title="V2 Footer">
+                <CmsText label="Description" textarea value={content.v2.footer.description} onChange={(value) => updateV2Nested("footer", "description", value)} />
+                <CmsText label="Contact email" value={content.v2.footer.email} onChange={(value) => updateV2Nested("footer", "email", value)} />
+                <p className="text-sm font-bold text-slate-500">Footer links</p>
+                <ObjectList items={content.v2.footer.links || []} fields={[["label", "Label"], ["href", "URL"]]} onChange={(items) => updateV2Nested("footer", "links", items)} />
+                <p className="mt-2 text-sm font-bold text-slate-500">Social links (label: Facebook / YouTube / Instagram / Telegram)</p>
+                <ObjectList items={content.v2.footer.socials || []} fields={[["label", "Label"], ["href", "URL"]]} onChange={(items) => updateV2Nested("footer", "socials", items)} />
+                <CmsText label="Copyright line" value={content.v2.footer.copyright} onChange={(value) => updateV2Nested("footer", "copyright", value)} />
+              </Card>
+            </CmsGrid>
+          )}
+
           <div className="sticky bottom-4 z-20 flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-xl md:flex-row md:items-center md:justify-between">
             <div>
               <p className="font-black">Ready to publish?</p>
@@ -339,7 +466,7 @@ function Upload({ label, name }) {
     <label className="field-label rounded-md border border-dashed border-slate-300 bg-slate-50 p-4">
       {label}
       <input name={name} type="file" accept="image/*" />
-      <span className="text-xs font-bold text-slate-500">Saved in Backend/uploads</span>
+      <span className="text-xs font-bold text-slate-500">Uploaded to Cloudinary on save</span>
     </label>
   );
 }
@@ -375,6 +502,175 @@ function ObjectList({ items, fields, onChange }) {
         </div>
       ))}
       <button className="table-action w-fit" type="button" onClick={() => onChange([...items, Object.fromEntries(fields.map(([key]) => [key, ""]))])}>Add row</button>
+    </div>
+  );
+}
+
+function CtaBannerList({ items, onChange }) {
+  const updateItem = (index, key, value) => {
+    onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
+  };
+  const removeItem = (index) => onChange(items.filter((_item, itemIndex) => itemIndex !== index));
+
+  return (
+    <div className="grid gap-3">
+      {items.map((item, index) => (
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3" key={index}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="field-label">Title
+              <input value={item.title || ""} onChange={(event) => updateItem(index, "title", event.target.value)} />
+            </label>
+            <label className="field-label">Subtitle
+              <input value={item.subtitle || ""} onChange={(event) => updateItem(index, "subtitle", event.target.value)} />
+            </label>
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <label className="field-label">Button text
+              <input value={item.buttonText || ""} onChange={(event) => updateItem(index, "buttonText", event.target.value)} />
+            </label>
+            <label className="field-label">Variant
+              <select value={item.variant || "navy"} onChange={(event) => updateItem(index, "variant", event.target.value)}>
+                <option value="navy">Navy</option>
+                <option value="light">Light</option>
+              </select>
+            </label>
+          </div>
+          <button className="table-action mt-3" type="button" onClick={() => removeItem(index)}>Delete banner</button>
+        </div>
+      ))}
+      <button className="table-action w-fit" type="button" onClick={() => onChange([...items, { title: "", subtitle: "", variant: "navy", buttonText: "" }])}>Add banner</button>
+    </div>
+  );
+}
+
+function ChapterList({ items, onChange }) {
+  const updateItem = (index, key, value) => {
+    onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
+  };
+  const removeItem = (index) => onChange(items.filter((_item, itemIndex) => itemIndex !== index));
+
+  return (
+    <div className="grid gap-3">
+      {items.map((item, index) => (
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3" key={index}>
+          <label className="field-label">Chapter title
+            <input value={item.title || ""} onChange={(event) => updateItem(index, "title", event.target.value)} />
+          </label>
+          <label className="field-label mt-3">Description
+            <textarea value={item.text || ""} onChange={(event) => updateItem(index, "text", event.target.value)} />
+          </label>
+          <label className="mt-3 flex items-center gap-2 text-sm font-bold text-slate-700">
+            <input type="checkbox" checked={Boolean(item.locked)} onChange={(event) => updateItem(index, "locked", event.target.checked)} />
+            Locked (shown as "download to unlock")
+          </label>
+          <button className="table-action mt-3" type="button" onClick={() => removeItem(index)}>Delete chapter</button>
+        </div>
+      ))}
+      <button className="table-action w-fit" type="button" onClick={() => onChange([...items, { title: "", text: "", locked: false }])}>Add chapter</button>
+    </div>
+  );
+}
+
+function VideoTestimonialList({ items, onChange }) {
+  const updateItem = (index, key, value) => {
+    onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
+  };
+  const removeItem = (index) => onChange(items.filter((_item, itemIndex) => itemIndex !== index));
+
+  return (
+    <div className="grid gap-3">
+      {items.map((item, index) => (
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3" key={index}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="field-label">Name
+              <input value={item.name || ""} onChange={(event) => updateItem(index, "name", event.target.value)} />
+            </label>
+            <label className="field-label">Location
+              <input value={item.location || ""} onChange={(event) => updateItem(index, "location", event.target.value)} />
+            </label>
+          </div>
+          <label className="field-label mt-3">Quote
+            <textarea value={item.quote || ""} onChange={(event) => updateItem(index, "quote", event.target.value)} />
+          </label>
+          {index < 6 && (
+            <label className="field-label">Thumbnail upload
+              <input name={`v2VideoTestimonialImage${index}`} type="file" accept="image/*" />
+            </label>
+          )}
+          <button className="table-action mt-3" type="button" onClick={() => removeItem(index)}>Delete video testimonial</button>
+        </div>
+      ))}
+      <button className="table-action w-fit" type="button" onClick={() => onChange([...items, { name: "", location: "", quote: "", imageUrl: "" }])}>Add video testimonial</button>
+    </div>
+  );
+}
+
+function ReviewList({ items, onChange }) {
+  const updateItem = (index, key, value) => {
+    onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
+  };
+  const removeItem = (index) => onChange(items.filter((_item, itemIndex) => itemIndex !== index));
+
+  return (
+    <div className="grid gap-3">
+      {items.map((item, index) => (
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3" key={index}>
+          <div className="grid gap-3 md:grid-cols-[1fr_120px]">
+            <label className="field-label">Name
+              <input value={item.name || ""} onChange={(event) => updateItem(index, "name", event.target.value)} />
+            </label>
+            <label className="field-label">Rating (1-5)
+              <input type="number" min="1" max="5" value={item.rating ?? 5} onChange={(event) => updateItem(index, "rating", Number(event.target.value))} />
+            </label>
+          </div>
+          <label className="field-label mt-3">Review text
+            <textarea value={item.text || ""} onChange={(event) => updateItem(index, "text", event.target.value)} />
+          </label>
+          <button className="table-action mt-3" type="button" onClick={() => removeItem(index)}>Delete review</button>
+        </div>
+      ))}
+      <button className="table-action w-fit" type="button" onClick={() => onChange([...items, { name: "", text: "", rating: 5 }])}>Add review</button>
+    </div>
+  );
+}
+
+function UpsellList({ items, onChange }) {
+  const updateItem = (index, key, value) => {
+    onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
+  };
+  const removeItem = (index) => onChange(items.filter((_item, itemIndex) => itemIndex !== index));
+
+  return (
+    <div className="grid gap-3">
+      {items.map((item, index) => (
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3" key={index}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="field-label">Title
+              <input value={item.title || ""} onChange={(event) => updateItem(index, "title", event.target.value)} />
+            </label>
+            <label className="field-label">Id (unique, no spaces)
+              <input value={item.id || ""} onChange={(event) => updateItem(index, "id", event.target.value)} />
+            </label>
+          </div>
+          <label className="field-label mt-3">Description
+            <input value={item.desc || ""} onChange={(event) => updateItem(index, "desc", event.target.value)} />
+          </label>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <label className="field-label">Price
+              <input type="number" value={item.price ?? 0} onChange={(event) => updateItem(index, "price", Number(event.target.value))} />
+            </label>
+            <label className="field-label">Old price (strike-through)
+              <input type="number" value={item.oldPrice ?? 0} onChange={(event) => updateItem(index, "oldPrice", Number(event.target.value))} />
+            </label>
+            <label className="mt-7 flex items-center gap-2 text-sm font-bold text-slate-700">
+              <input type="checkbox" checked={Boolean(item.popular)} onChange={(event) => updateItem(index, "popular", event.target.checked)} />
+              Mark as popular
+            </label>
+          </div>
+          <button className="table-action mt-3" type="button" onClick={() => removeItem(index)}>Delete upsell</button>
+        </div>
+      ))}
+      <button className="table-action w-fit" type="button" onClick={() => onChange([...items, { id: "", title: "", desc: "", price: 0, oldPrice: 0, popular: false }])}>Add upsell</button>
     </div>
   );
 }
