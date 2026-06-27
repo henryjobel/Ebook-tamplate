@@ -1,31 +1,32 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { Content, Ebook, Payment, DEFAULT_CONTENT, DEFAULT_EBOOK, DEFAULT_PAYMENT, fetchEbookContent } from "../lib/api";
+import { Content, Ebook, Payment, Product, DEFAULT_CONTENT, DEFAULT_EBOOK, DEFAULT_PAYMENT, fetchEbookContent, fetchProducts } from "../lib/api";
 
 interface ContentState {
   ebook: Ebook;
   payment: Payment;
   content: Content;
+  products: Product[];
 }
 
 const ContentContext = createContext<ContentState>({
   ebook: DEFAULT_EBOOK,
   payment: DEFAULT_PAYMENT,
-  content: DEFAULT_CONTENT
+  content: DEFAULT_CONTENT,
+  products: []
 });
 
 export function ContentProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ContentState>({
     ebook: DEFAULT_EBOOK,
     payment: DEFAULT_PAYMENT,
-    content: DEFAULT_CONTENT
+    content: DEFAULT_CONTENT,
+    products: []
   });
 
   useEffect(() => {
-    fetchEbookContent()
-      .then(setState)
-      .catch(() => {
-        /* keep default fallback content if the backend isn't reachable */
-      });
+    Promise.all([fetchEbookContent(), fetchProducts()])
+      .then(([ebookData, products]) => setState({ ...ebookData, products }))
+      .catch(() => {});
   }, []);
 
   return <ContentContext.Provider value={state}>{children}</ContentContext.Provider>;

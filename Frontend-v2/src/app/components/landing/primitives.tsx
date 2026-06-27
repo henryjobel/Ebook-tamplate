@@ -1,4 +1,5 @@
 import { ButtonHTMLAttributes, ReactNode } from "react";
+import { useContent } from "../../context/ContentContext";
 
 /** Big thumb-friendly CTA button (min 56px height) with green glow on hover. */
 export function CtaButton({
@@ -66,6 +67,10 @@ export function Section({
 
 /** 3D-tilted ebook cover mockup with a glowing aura behind it. */
 export function BookCover({ className = "" }: { className?: string }) {
+  const { ebook, products } = useContent();
+  const primaryProduct = products.find(p => p.type === "ebook") || products[0] || null;
+  const coverUrl = ebook.coverUrl || primaryProduct?.imageUrl || "";
+
   return (
     <div className={`relative ${className}`} style={{ perspective: "1400px" }}>
       {/* glow */}
@@ -78,28 +83,38 @@ export function BookCover({ className = "" }: { className?: string }) {
         {/* spine */}
         <div className="absolute -left-2 top-1 h-[calc(100%-8px)] w-3 rounded-l-md bg-green-deep/80 blur-[0.5px]" />
         <div className="relative aspect-[3/4.2] w-[230px] overflow-hidden rounded-r-md rounded-l-sm bg-navy-soft shadow-[0_40px_80px_-20px_rgba(0,0,0,0.7)] ring-1 ring-white/10 md:w-[300px]">
-          {/* cover art */}
-          <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_20%_0%,#10314f_0%,#0A1628_60%)]" />
-          <div className="absolute -right-10 -top-10 h-44 w-44 rounded-full bg-green/30 blur-2xl" />
-          <div className="absolute -left-12 bottom-8 h-40 w-40 rounded-full bg-orange/25 blur-2xl" />
-          <div className="relative flex h-full flex-col p-6">
-            <span className="inline-flex w-fit items-center gap-1 rounded-full bg-green/20 px-3 py-1 text-[11px] font-[600] text-green">
-              ২০২৬ এডিশন
-            </span>
-            <div className="mt-auto">
-              <p className="text-[11px] font-[600] uppercase tracking-[0.2em] text-orange">
-                E-BOOK
-              </p>
-              <h3 className="mt-2 text-white" style={{ fontSize: "1.7rem", lineHeight: 1.2, fontWeight: 800 }}>
-                AI দিয়ে<br />ফ্রিল্যান্সিং
-              </h3>
-              <p className="mt-2 text-sm text-white/70">
-                ঘরে বসে অনলাইনে আয়ের সম্পূর্ণ গাইড
-              </p>
-              <div className="mt-4 h-1 w-16 rounded-full bg-green" />
-              <p className="mt-4 text-xs text-white/50">রাকিব হাসান</p>
-            </div>
-          </div>
+          {coverUrl ? (
+            <img
+              src={coverUrl}
+              alt={ebook.title}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : (
+            <>
+              {/* cover art fallback */}
+              <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_20%_0%,#10314f_0%,#0A1628_60%)]" />
+              <div className="absolute -right-10 -top-10 h-44 w-44 rounded-full bg-green/30 blur-2xl" />
+              <div className="absolute -left-12 bottom-8 h-40 w-40 rounded-full bg-orange/25 blur-2xl" />
+              <div className="relative flex h-full flex-col p-6">
+                <span className="inline-flex w-fit items-center gap-1 rounded-full bg-green/20 px-3 py-1 text-[11px] font-[600] text-green">
+                  ২০২৬ এডিশন
+                </span>
+                <div className="mt-auto">
+                  <p className="text-[11px] font-[600] uppercase tracking-[0.2em] text-orange">
+                    E-BOOK
+                  </p>
+                  <h3 className="mt-2 text-white" style={{ fontSize: "1.7rem", lineHeight: 1.2, fontWeight: 800 }}>
+                    AI দিয়ে<br />ফ্রিল্যান্সিং
+                  </h3>
+                  <p className="mt-2 text-sm text-white/70">
+                    ঘরে বসে অনলাইনে আয়ের সম্পূর্ণ গাইড
+                  </p>
+                  <div className="mt-4 h-1 w-16 rounded-full bg-green" />
+                  <p className="mt-4 text-xs text-white/50">রাকিব হাসান</p>
+                </div>
+              </div>
+            </>
+          )}
           {/* page edge */}
           <div className="absolute right-0 top-0 h-full w-1.5 bg-gradient-to-l from-white/30 to-transparent" />
         </div>

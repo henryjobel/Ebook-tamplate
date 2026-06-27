@@ -689,61 +689,168 @@ function OrdersPanel({ state, patchOrder }: { state: AdminState; patchOrder: (id
   );
 }
 
-function ProductsPanel({ state, createProduct, patchProduct }: { state: AdminState; createProduct: (form: HTMLFormElement) => void; patchProduct: (id: string, body: any) => void }) {
+function ProductForm({ product, onSubmit, submitLabel }: { product?: any; onSubmit: (form: HTMLFormElement) => void; submitLabel: string }) {
+  return (
+    <form className="grid gap-4 md:grid-cols-2" onSubmit={(e) => { e.preventDefault(); onSubmit(e.currentTarget); }}>
+      {!product && (
+        <Field label="Product type">
+          <select name="type" className="h-9 w-full rounded-md border bg-white px-3 text-sm">
+            <option value="ebook">ebook</option>
+            <option value="physical">physical</option>
+          </select>
+        </Field>
+      )}
+      <Field label="Title"><Input name="title" required defaultValue={product?.title ?? ""} /></Field>
+      <Field label="Price"><Input name="price" type="number" defaultValue={product?.price ?? 0} /></Field>
+      <Field label="Original price"><Input name="originalPrice" type="number" defaultValue={product?.originalPrice ?? 0} /></Field>
+      <Field label="Stock"><Input name="stock" type="number" defaultValue={product?.stock ?? 0} /></Field>
+      <Field label="SKU"><Input name="sku" defaultValue={product?.sku ?? ""} /></Field>
+      <Field label="Shipping charge"><Input name="shippingCharge" type="number" defaultValue={product?.shippingCharge ?? 0} /></Field>
+      <Field label="Delivery options (comma separated)"><Input name="deliveryOptions" defaultValue={product?.deliveryOptions?.join(", ") ?? ""} placeholder="Courier, Same day, Digital download" /></Field>
+      <div className="md:col-span-2"><Field label="Description"><Textarea name="description" defaultValue={product?.description ?? ""} /></Field></div>
+      <div className="md:col-span-2"><Field label="Delivery note"><Textarea name="deliveryNote" defaultValue={product?.deliveryNote ?? ""} /></Field></div>
+      <FileField label={product?.imageUrl ? "Replace image (optional)" : "Product image"} name="productImage" />
+      <FileField label={product?.originalFileName ? `Replace file: ${product.originalFileName}` : "Digital file"} name="productFile" />
+      <div className="md:col-span-2"><Button className={primaryButtonClass}>{submitLabel}</Button></div>
+    </form>
+  );
+}
+
+function ProductsPanel({ state, createProduct, patchProduct, deleteProduct }: {
+  state: AdminState;
+  createProduct: (form: HTMLFormElement) => void;
+  patchProduct: (id: string, body: any) => void;
+  deleteProduct: (id: string) => void;
+}) {
+  const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const defaultProduct = state.products.length === 0 ? {
+    _id: "__default__",
+    title: state.ebook.title || "Main Ebook",
+    type: "ebook",
+    price: state.ebook.price,
+    originalPrice: state.ebook.originalPrice,
+    description: state.ebook.description || "",
+    status: "active",
+    imageUrl: state.ebook.coverUrl,
+    isDefault: true
+  } : null;
+
+  const displayProducts = defaultProduct ? [defaultProduct] : state.products;
+
   return (
     <PanelShell title="Products" description="Add ebooks or physical products backed by MongoDB and Cloudinary uploads.">
+
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="sticky top-0 flex items-center justify-between border-b border-[#edf2ef] bg-white px-6 py-4">
+              <h3 className="text-lg font-semibold text-[#15392f]">Edit Product</h3>
+              <button onClick={() => setEditingProduct(null)} className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-[#f3f7f5]">
+                <X className="size-5 text-[#60746b]" />
+              </button>
+            </div>
+            <div className="p-6">
+              {editingProduct.imageUrl && (
+                <div className="mb-4">
+                  <img src={editingProduct.imageUrl} alt="Current" className="h-32 w-auto rounded-lg object-cover" />
+                  <p className="mt-1 text-xs text-[#60746b]">Current image</p>
+                </div>
+              )}
+              <ProductForm
+                product={editingProduct}
+                submitLabel="Save changes"
+                onSubmit={(form) => {
+                  patchProduct(editingProduct._id, new FormData(form) as any);
+                  setEditingProduct(null);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <Card className={panelCardClass}>
         <CardHeader className="border-b border-[#edf2ef] bg-gradient-to-r from-[#fbfdfc] to-white">
           <CardTitle className="text-[#15392f]">Create Product</CardTitle>
-          <CardDescription>Add a digital ebook or a physical product with delivery settings.</CardDescription>
+          <CardDescription>Add a digital ebook or a physical product.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <form className="grid gap-4 p-5 md:grid-cols-2" onSubmit={(e) => { e.preventDefault(); createProduct(e.currentTarget); }}>
-            <Field label="Product type">
-              <select name="type" className="h-9 w-full rounded-md border bg-white px-3 text-sm">
-                <option value="ebook">ebook</option>
-                <option value="physical">physical</option>
-              </select>
-            </Field>
-            <Field label="Title"><Input name="title" required /></Field>
-            <Field label="Price"><Input name="price" type="number" defaultValue="0" /></Field>
-            <Field label="Original price"><Input name="originalPrice" type="number" defaultValue="0" /></Field>
-            <Field label="Stock"><Input name="stock" type="number" defaultValue="0" /></Field>
-            <Field label="SKU"><Input name="sku" /></Field>
-            <Field label="Shipping charge"><Input name="shippingCharge" type="number" defaultValue="0" /></Field>
-            <Field label="Delivery options (comma separated)"><Input name="deliveryOptions" placeholder="Courier, Same day, Digital download" /></Field>
-            <Field label="Description"><Textarea name="description" /></Field>
-            <Field label="Delivery note"><Textarea name="deliveryNote" /></Field>
-            <FileField label="Product image" name="productImage" />
-            <FileField label="Digital file" name="productFile" />
-            <div className="md:col-span-2"><Button className={primaryButtonClass}><Plus className="size-4" /> Create product</Button></div>
-          </form>
+        <CardContent className="p-5">
+          <ProductForm submitLabel={<><Plus className="size-4" /> Create product</>} onSubmit={createProduct} />
         </CardContent>
       </Card>
 
       <Card className={panelCardClass}>
         <CardHeader className="border-b border-[#edf2ef] bg-gradient-to-r from-[#fbfdfc] to-white">
           <CardTitle className="text-[#15392f]">Product List</CardTitle>
-          <CardDescription>Manage product publishing status.</CardDescription>
+          <CardDescription>Edit, delete, or change product status.</CardDescription>
         </CardHeader>
         <CardContent className="p-5">
-          {!state.products.length ? <p className="text-sm text-[#60746b]">No products yet.</p> : (
+          {!displayProducts.length ? <p className="text-sm text-[#60746b]">No products yet.</p> : (
             <Table>
-              <TableHeader><TableRow><TableHead>Product</TableHead><TableHead>Type</TableHead><TableHead>Price</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Product</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Price</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
               <TableBody>
-                {state.products.map((product) => (
+                {displayProducts.map((product) => (
                   <TableRow key={product._id}>
                     <TableCell>
-                      <div className="font-medium">{product.title}</div>
-                      <div className="text-xs text-[#60746b]">{product.sku || product.originalFileName || "No SKU"}</div>
+                      <div className="flex items-center gap-3">
+                        {product.imageUrl && <img src={product.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover" />}
+                        <div>
+                          <div className="font-medium">{product.title}</div>
+                          {product.isDefault && <span className="text-xs text-orange font-medium">● Main ebook (default)</span>}
+                          {!product.isDefault && <div className="text-xs text-[#60746b]">{product.sku || product.originalFileName || "No SKU"}</div>}
+                        </div>
+                      </div>
                     </TableCell>
                     <TableCell>{product.type}</TableCell>
                     <TableCell>{formatTk(product.price)}</TableCell>
                     <TableCell>
-                      <Select value={product.status} onValueChange={(status) => patchProduct(product._id, { status })}>
-                        <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                        <SelectContent><SelectItem value="active">active</SelectItem><SelectItem value="draft">draft</SelectItem><SelectItem value="archived">archived</SelectItem></SelectContent>
-                      </Select>
+                      {product.isDefault ? (
+                        <Badge className="bg-emerald-100 text-emerald-800">active</Badge>
+                      ) : (
+                        <Select value={product.status} onValueChange={(status) => patchProduct(product._id, { status })}>
+                          <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="active">active</SelectItem>
+                            <SelectItem value="draft">draft</SelectItem>
+                            <SelectItem value="archived">archived</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {product.isDefault ? (
+                        <span className="text-xs text-[#60746b]">Edit in Settings</span>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm" className={softActionButtonClass} onClick={() => setEditingProduct(product)}>
+                            Edit
+                          </Button>
+                          {confirmDeleteId === product._id ? (
+                            <div className="flex items-center gap-1">
+                              <Button variant="outline" size="sm" className={dangerActionButtonClass} onClick={() => { deleteProduct(product._id); setConfirmDeleteId(null); }}>
+                                Confirm
+                              </Button>
+                              <Button variant="outline" size="sm" className={softActionButtonClass} onClick={() => setConfirmDeleteId(null)}>
+                                Cancel
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button variant="outline" size="sm" className={dangerActionButtonClass} onClick={() => setConfirmDeleteId(product._id)}>
+                              Delete
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1101,15 +1208,25 @@ export function AdminApp() {
 
   async function patchProduct(id: string, body: any) {
     try {
-      const data = await authed(token, `/api/admin/products/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      }).then(readJson);
+      const isFormData = body instanceof FormData;
+      const options: RequestInit = isFormData
+        ? { method: "PATCH", body }
+        : { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+      const data = await authed(token, `/api/admin/products/${id}`, options).then(readJson);
       setState((s) => ({ ...s, products: s.products.map((p) => (p._id === id ? data.product : p)) }));
       toast.success("Product updated");
     } catch (error: any) {
       toast.error(error.message || "Product update failed");
+    }
+  }
+
+  async function deleteProduct(id: string) {
+    try {
+      await authed(token, `/api/admin/products/${id}`, { method: "DELETE" }).then(readJson);
+      setState((s) => ({ ...s, products: s.products.filter((p) => p._id !== id) }));
+      toast.success("Product deleted");
+    } catch (error: any) {
+      toast.error(error.message || "Delete failed");
     }
   }
 
@@ -1132,7 +1249,7 @@ export function AdminApp() {
         <>
           {active === "overview" && <OverviewPanel state={state} />}
           {active === "orders" && <OrdersPanel state={state} patchOrder={patchOrder} />}
-          {active === "products" && <ProductsPanel state={state} createProduct={createProduct} patchProduct={patchProduct} />}
+          {active === "products" && <ProductsPanel state={state} createProduct={createProduct} patchProduct={patchProduct} deleteProduct={deleteProduct} />}
           {active === "settings" && <SettingsPanel state={state} setState={setState} saveSettings={saveSettings} />}
           {active === "cms-core" && <CmsCorePanel state={state} setState={setState} saveSettings={saveSettings} />}
           {active === "cms-v2" && <CmsV2Panel state={state} setState={setState} saveSettings={saveSettings} />}

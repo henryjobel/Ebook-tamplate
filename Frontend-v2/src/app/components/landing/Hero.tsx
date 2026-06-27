@@ -1,10 +1,14 @@
 import { Star, ShieldCheck, ArrowRight } from "lucide-react";
 import { BookCover, CtaButton, Pill } from "./primitives";
 import { useContent } from "../../context/ContentContext";
+import { toBn } from "../../lib/format";
 
 export function Hero() {
-  const { content } = useContent();
+  const { content, ebook, products } = useContent();
   const { v2 } = content;
+
+  const primaryProduct = products.find(p => p.type === "ebook") || products[0] || null;
+  const displayPrice = primaryProduct ? primaryProduct.price : ebook.price;
   const heroHeadline = v2.heroHeadline || content.heroHeadline;
   const heroSubheadline = v2.heroSubheadline || content.heroSubheadline;
   const trustLine = v2.trustLine || content.trustLine;
@@ -43,7 +47,7 @@ export function Hero() {
 
           <div className="mt-7 flex flex-col items-center gap-3 md:items-start">
             <CtaButton onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}>
-              {heroCta}
+              {displayPrice > 0 ? `এখনই অর্ডার করুন — মাত্র ${toBn(displayPrice)} টাকা` : heroCta}
               <ArrowRight className="h-5 w-5" />
             </CtaButton>
             <span className="inline-flex items-center gap-1.5 text-sm text-white/55">

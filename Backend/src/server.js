@@ -11,6 +11,7 @@ import { Product } from "./models/Product.js";
 import { Order } from "./models/Order.js";
 import { mergeContent } from "./defaultContent.js";
 import { uploadImage, uploadPrivateFile, getSignedFileUrl } from "./lib/cloudinary.js";
+import { sendEbookDeliveryEmail } from "./lib/email.js";
 
 dotenv.config();
 
@@ -138,6 +139,11 @@ app.post("/api/admin/login", async (req, res) => {
   });
 });
 
+app.get("/api/products", async (_req, res) => {
+  const products = await Product.find({ status: "active" }).sort({ createdAt: -1 });
+  res.json({ products });
+});
+
 app.get("/api/admin/orders", requireAdmin, async (_req, res) => {
   const orders = await Order.find().sort({ createdAt: -1 });
   res.json({ orders });
@@ -190,16 +196,48 @@ app.post("/api/admin/products", requireAdmin, upload.fields([
   res.status(201).json({ product: created });
 });
 
-app.patch("/api/admin/products/:id", requireAdmin, async (req, res) => {
+app.patch("/api/admin/products/:id", requireAdmin, upload.fields([
+  { name: "productImage", maxCount: 1 },
+  { name: "productFile", maxCount: 1 }
+]), async (req, res) => {
   const product = await Product.findById(req.params.id);
   if (!product) return res.status(404).json({ message: "Product পাওয়া যায়নি" });
 
-  if (req.body.status && ["active", "draft", "archived"].includes(req.body.status)) {
-    product.status = req.body.status;
-    await product.save();
+  const { title, price, originalPrice, description, stock, sku, shippingCharge, deliveryOptions, deliveryNote, status } = req.body;
+
+  if (title) product.title = title;
+  if (price !== undefined) product.price = Number(price);
+  if (originalPrice !== undefined) product.originalPrice = Number(originalPrice);
+  if (description !== undefined) product.description = description;
+  if (stock !== undefined && product.type === "physical") product.stock = Number(stock);
+  if (sku !== undefined) product.sku = sku;
+  if (shippingCharge !== undefined) product.shippingCharge = Number(shippingCharge);
+  if (deliveryOptions) product.deliveryOptions = String(deliveryOptions).split(",").map((x) => x.trim()).filter(Boolean);
+  if (deliveryNote !== undefined) product.deliveryNote = deliveryNote;
+  if (status && ["active", "draft", "archived"].includes(status)) product.status = status;
+
+  const imageFile = req.files?.productImage?.[0];
+  if (imageFile) {
+    product.imageUrl = await uploadImage(imageFile.buffer, "ebook-store/products");
   }
 
+  const productFile = req.files?.productFile?.[0];
+  if (productFile) {
+    const uploaded = await uploadPrivateFile(productFile.buffer, "ebook-store/files", productFile.originalname);
+    product.filePublicId = uploaded.publicId;
+    product.fileFormat = uploaded.format;
+    product.fileResourceType = uploaded.resourceType;
+    product.originalFileName = productFile.originalname;
+  }
+
+  await product.save();
   res.json({ product });
+});
+
+app.delete("/api/admin/products/:id", requireAdmin, async (req, res) => {
+  const product = await Product.findByIdAndDelete(req.params.id);
+  if (!product) return res.status(404).json({ message: "Product পাওয়া যায়নি" });
+  res.json({ ok: true });
 });
 
 app.get("/api/admin/settings", requireAdmin, async (_req, res) => {
@@ -338,12 +376,25 @@ app.patch("/api/admin/orders/:id", requireAdmin, async (req, res) => {
     return res.status(400).json({ message: "সঠিক স্ট্যাটাস দিন" });
   }
 
+  const wasAlreadyApproved = order.status === "approved";
   order.status = status;
   if (req.body.deliveryStatus) order.deliveryStatus = req.body.deliveryStatus;
   if (typeof req.body.trackingNumber === "string") order.trackingNumber = req.body.trackingNumber;
   if (typeof req.body.deliveryNote === "string") order.deliveryNote = req.body.deliveryNote;
   order.downloadToken = status === "approved" ? createDownloadToken(order.id) : "";
   await order.save();
+
+  if (status === "approved" && !wasAlreadyApproved && order.email) {
+    const settings = await getSettings();
+    const backendUrl = process.env.BACKEND_URL || `http://localhost:${port}`;
+    const downloadUrl = `${backendUrl}/api/download/${order.downloadToken}`;
+    sendEbookDeliveryEmail({
+      to: order.email,
+      customerName: order.name,
+      ebookTitle: settings.ebook.title || "ইবুক",
+      downloadUrl
+    }).catch((err) => console.error("Email send failed:", err));
+  }
 
   res.json({ order });
 });

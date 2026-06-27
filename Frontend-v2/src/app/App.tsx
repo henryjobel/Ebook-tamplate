@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Header } from "./components/landing/Header";
 import { Hero } from "./components/landing/Hero";
 import { PainPoints } from "./components/landing/PainPoints";
@@ -13,9 +14,12 @@ import { Footer } from "./components/landing/Footer";
 import { StickyCta } from "./components/landing/StickyCta";
 import { ContentProvider, useContent } from "./context/ContentContext";
 import { AdminApp } from "./admin/AdminApp";
+import { initPixel } from "./lib/pixel";
 
 function LandingContent() {
   const { content } = useContent();
+
+  useEffect(() => { initPixel(); }, []);
   const ctaBanners = content.v2.ctaBanners;
 
   return (

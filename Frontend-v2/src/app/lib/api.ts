@@ -208,6 +208,28 @@ export const DEFAULT_CONTENT: Content = {
   }
 };
 
+export interface Product {
+  _id: string;
+  title: string;
+  description: string;
+  price: number;
+  originalPrice: number;
+  type: "ebook" | "physical";
+  imageUrl?: string;
+  status: string;
+}
+
+export async function fetchProducts(): Promise<Product[]> {
+  try {
+    const res = await fetch(`${API_URL}/api/products`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.products || [];
+  } catch {
+    return [];
+  }
+}
+
 export const DEFAULT_EBOOK: Ebook = {
   title: "AI দিয়ে ফ্রিল্যান্সিং",
   subtitle: "ঘরে বসে অনলাইনে আয়ের সম্পূর্ণ গাইড",

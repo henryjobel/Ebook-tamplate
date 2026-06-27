@@ -4,6 +4,7 @@ import { Section, Pill, CtaButton } from "./primitives";
 import { useContent } from "../../context/ContentContext";
 import { createOrder } from "../../lib/api";
 import { toBn } from "../../lib/format";
+import { trackInitiateCheckout, trackPurchase } from "../../lib/pixel";
 
 const BN_ORDINAL = ["১", "২", "৩", "৪", "৫", "৬"];
 
@@ -13,25 +14,48 @@ export function Pricing() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [successOrderId, setSuccessOrderId] = useState("");
-  const { content, ebook, payment } = useContent();
+  const { content, ebook, payment, products } = useContent();
   const { v2 } = content;
 
   const toggle = (id: string) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
-  const upsellTotal = v2.upsells.filter((u) => selected.includes(u.id)).reduce((a, u) => a + u.price, 0);
+  // First product = main product being sold; rest = upsells
+  const primaryProduct = products.find(p => p.type === "ebook") || products[0] || null;
+  const upsellProducts = primaryProduct
+    ? products.filter(p => p._id !== primaryProduct._id)
+    : [];
+
+  const mainPrice = primaryProduct ? primaryProduct.price : ebook.price;
+  const mainOriginalPrice = primaryProduct && primaryProduct.originalPrice > primaryProduct.price
+    ? primaryProduct.originalPrice
+    : ebook.originalPrice;
+
+  const productUpsells = upsellProducts.map((p) => ({
+    id: p._id,
+    title: p.title,
+    desc: p.description || "",
+    price: p.price,
+    oldPrice: p.originalPrice || p.price,
+    popular: false,
+    imageUrl: p.imageUrl
+  }));
+  const allUpsells = [...v2.upsells, ...productUpsells];
+
+  const upsellTotal = allUpsells.filter((u) => selected.includes(u.id)).reduce((a, u) => a + u.price, 0);
   const bonuses = v2.bonuses?.length ? v2.bonuses : content.bonuses;
-  const total = ebook.price + upsellTotal;
-  const savings = Math.max(0, ebook.originalPrice - ebook.price);
-  const savingsPercent = ebook.originalPrice > 0 ? Math.round((savings / ebook.originalPrice) * 100) : 0;
+  const total = mainPrice + upsellTotal;
+  const savings = Math.max(0, mainOriginalPrice - mainPrice);
+  const savingsPercent = mainOriginalPrice > 0 ? Math.round((savings / mainOriginalPrice) * 100) : 0;
 
   async function submitOrder(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     setSubmitting(true);
     setError("");
     setSuccessOrderId("");
 
-    const formData = new FormData(event.currentTarget);
     try {
       const order = await createOrder({
         name: String(formData.get("name") || "").trim(),
@@ -43,7 +67,15 @@ export function Pricing() {
         orderBump: selected.length > 0
       });
       setSuccessOrderId(order.orderId);
-      event.currentTarget.reset();
+      trackPurchase({
+        orderId: order.orderId,
+        value: total,
+        currency: "BDT",
+        productTitle: primaryProduct?.title || ebook.title,
+        productId: primaryProduct?._id || "main-ebook",
+        quantity: 1 + selected.length
+      });
+      form.reset();
     } catch (err: any) {
       setError(err.message || "Order submit failed");
     } finally {
@@ -62,13 +94,16 @@ export function Pricing() {
 
       <div className="mx-auto mt-10 max-w-xl overflow-hidden rounded-3xl border-2 border-green/40 bg-white shadow-[0_30px_70px_-30px_rgba(0,208,132,0.45)]">
         <div className="bg-navy px-6 py-8 text-center">
-          {ebook.originalPrice > ebook.price && (
+          {primaryProduct && (
+            <p className="mb-1 text-sm font-semibold uppercase tracking-wider text-white/60">{primaryProduct.title}</p>
+          )}
+          {mainOriginalPrice > mainPrice && (
             <p className="text-white/50 line-through" style={{ fontSize: "1.25rem" }}>
-              {toBn(ebook.originalPrice)} টাকা
+              {toBn(mainOriginalPrice)} টাকা
             </p>
           )}
           <p className="mt-1 text-green" style={{ fontSize: "3.25rem", fontWeight: 800, lineHeight: 1 }}>
-            মাত্র {toBn(ebook.price)} টাকা
+            মাত্র {toBn(mainPrice)} টাকা
           </p>
           {savings > 0 && (
             <span className="mt-3 inline-block rounded-full bg-orange/20 px-3 py-1 text-sm font-[600] text-orange">
@@ -100,7 +135,7 @@ export function Pricing() {
               অর্ডারে যোগ করুন (স্পেশাল ছাড়ে):
             </p>
             <div className="mt-3 space-y-3">
-              {v2.upsells.map((u) => {
+              {allUpsells.map((u) => {
                 const checked = selected.includes(u.id);
                 return (
                   <label
@@ -145,7 +180,7 @@ export function Pricing() {
             </span>
           </div>
 
-          <CtaButton full className="mt-4" onClick={() => setCheckoutOpen(true)}>
+          <CtaButton full className="mt-4" onClick={() => { setCheckoutOpen(true); trackInitiateCheckout(total); }}>
             <Check className="h-5 w-5" strokeWidth={3} />
             এখনই অর্ডার করুন - {toBn(total)} টাকা
           </CtaButton>
