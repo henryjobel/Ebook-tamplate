@@ -21,6 +21,19 @@ export function uploadImage(buffer, folder) {
   });
 }
 
+export function uploadVideo(buffer, folder) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder, resource_type: "video" },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result.secure_url);
+      }
+    );
+    stream.end(buffer);
+  });
+}
+
 export function uploadPrivateFile(buffer, folder, originalName) {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(

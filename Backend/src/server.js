@@ -10,7 +10,7 @@ import { getSettings } from "./models/Settings.js";
 import { Product } from "./models/Product.js";
 import { Order } from "./models/Order.js";
 import { mergeContent } from "./defaultContent.js";
-import { uploadImage, uploadPrivateFile, getSignedFileUrl } from "./lib/cloudinary.js";
+import { uploadImage, uploadPrivateFile, uploadVideo, getSignedFileUrl } from "./lib/cloudinary.js";
 import { sendEbookDeliveryEmail } from "./lib/email.js";
 
 dotenv.config();
@@ -77,10 +77,58 @@ function createDownloadToken(orderId) {
   });
 }
 
+function inferFileFormat(source) {
+  if (source.fileFormat) return source.fileFormat;
+  const name = source.originalFileName || source.filePublicId || "";
+  const match = String(name).match(/\.([a-z0-9]+)$/i);
+  return match ? match[1].toLowerCase() : "";
+}
+
+function downloadFileName(source) {
+  const fallback = `${source.title || "ebook"}.pdf`;
+  const name = source.originalFileName || fallback;
+  return String(name)
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim() || "ebook.pdf";
+}
+
+async function getDownloadFileSource(settings) {
+  if (settings.ebook.filePublicId) {
+    return {
+      title: settings.ebook.title,
+      filePublicId: settings.ebook.filePublicId,
+      fileFormat: inferFileFormat(settings.ebook),
+      fileResourceType: settings.ebook.fileResourceType,
+      originalFileName: settings.ebook.originalFileName
+    };
+  }
+
+  const ebookProduct = await Product.findOne({
+    type: "ebook",
+    status: "active",
+    filePublicId: { $ne: "" }
+  }).sort({ createdAt: -1 });
+
+  if (!ebookProduct) return null;
+  return {
+    title: ebookProduct.title,
+    filePublicId: ebookProduct.filePublicId,
+    fileFormat: inferFileFormat(ebookProduct),
+    fileResourceType: ebookProduct.fileResourceType,
+    originalFileName: ebookProduct.originalFileName
+  };
+}
+
 async function uploadIfPresent(req, fieldName) {
   const file = req.files?.[fieldName]?.[0];
   if (!file) return null;
   return uploadImage(file.buffer, "ebook-store");
+}
+
+function readBoolean(value) {
+  const finalValue = Array.isArray(value) ? value[value.length - 1] : value;
+  return finalValue === "true" || finalValue === true;
 }
 
 app.get("/api/health", (_req, res) => {
@@ -156,9 +204,10 @@ app.get("/api/admin/products", requireAdmin, async (_req, res) => {
 
 app.post("/api/admin/products", requireAdmin, upload.fields([
   { name: "productImage", maxCount: 1 },
+  { name: "productVideo", maxCount: 1 },
   { name: "productFile", maxCount: 1 }
 ]), async (req, res) => {
-  const { title, type, price, originalPrice, description, stock, sku, shippingCharge, deliveryOptions, deliveryNote } = req.body;
+  const { title, type, price, originalPrice, description, stock, sku, shippingCharge, deliveryOptions, deliveryNote, youtubeUrl, isUpsell } = req.body;
 
   if (!title || !["ebook", "physical"].includes(type)) {
     return res.status(400).json({ message: "Product title এবং type প্রয়োজন" });
@@ -175,12 +224,19 @@ app.post("/api/admin/products", requireAdmin, upload.fields([
     shippingCharge: type === "physical" ? Number(shippingCharge || 0) : 0,
     deliveryOptions: type === "physical" ? String(deliveryOptions || "").split(",").map((item) => item.trim()).filter(Boolean) : ["Digital download"],
     deliveryNote: deliveryNote || "",
+    youtubeUrl: youtubeUrl || "",
+    isUpsell: readBoolean(isUpsell),
     status: "active"
   };
 
   const imageFile = req.files?.productImage?.[0];
   if (imageFile) {
     product.imageUrl = await uploadImage(imageFile.buffer, "ebook-store/products");
+  }
+
+  const videoFile = req.files?.productVideo?.[0];
+  if (videoFile) {
+    product.videoUrl = await uploadVideo(videoFile.buffer, "ebook-store/product-videos");
   }
 
   const productFile = req.files?.productFile?.[0];
@@ -198,12 +254,13 @@ app.post("/api/admin/products", requireAdmin, upload.fields([
 
 app.patch("/api/admin/products/:id", requireAdmin, upload.fields([
   { name: "productImage", maxCount: 1 },
+  { name: "productVideo", maxCount: 1 },
   { name: "productFile", maxCount: 1 }
 ]), async (req, res) => {
   const product = await Product.findById(req.params.id);
   if (!product) return res.status(404).json({ message: "Product পাওয়া যায়নি" });
 
-  const { title, price, originalPrice, description, stock, sku, shippingCharge, deliveryOptions, deliveryNote, status } = req.body;
+  const { title, price, originalPrice, description, stock, sku, shippingCharge, deliveryOptions, deliveryNote, youtubeUrl, isUpsell, status } = req.body;
 
   if (title) product.title = title;
   if (price !== undefined) product.price = Number(price);
@@ -214,11 +271,18 @@ app.patch("/api/admin/products/:id", requireAdmin, upload.fields([
   if (shippingCharge !== undefined) product.shippingCharge = Number(shippingCharge);
   if (deliveryOptions) product.deliveryOptions = String(deliveryOptions).split(",").map((x) => x.trim()).filter(Boolean);
   if (deliveryNote !== undefined) product.deliveryNote = deliveryNote;
+  if (youtubeUrl !== undefined) product.youtubeUrl = youtubeUrl;
+  if (isUpsell !== undefined) product.isUpsell = readBoolean(isUpsell);
   if (status && ["active", "draft", "archived"].includes(status)) product.status = status;
 
   const imageFile = req.files?.productImage?.[0];
   if (imageFile) {
     product.imageUrl = await uploadImage(imageFile.buffer, "ebook-store/products");
+  }
+
+  const videoFile = req.files?.productVideo?.[0];
+  if (videoFile) {
+    product.videoUrl = await uploadVideo(videoFile.buffer, "ebook-store/product-videos");
   }
 
   const productFile = req.files?.productFile?.[0];
@@ -407,18 +471,38 @@ app.get("/api/download/:token", async (req, res) => {
     return res.status(401).send("Download link expired");
   }
 
+  if (payload.purpose !== "download") {
+    return res.status(401).send("Invalid download link");
+  }
+
   const order = await Order.findById(payload.orderId);
   const settings = await getSettings();
-  if (!order || order.status !== "approved" || !settings.ebook.filePublicId) {
+  const downloadFile = await getDownloadFileSource(settings);
+  if (!order || order.status !== "approved" || !downloadFile?.filePublicId) {
     return res.status(403).send("Download not available");
   }
 
   const signedUrl = getSignedFileUrl(
-    settings.ebook.filePublicId,
-    settings.ebook.fileFormat,
-    settings.ebook.fileResourceType
+    downloadFile.filePublicId,
+    downloadFile.fileFormat,
+    downloadFile.fileResourceType
   );
-  res.redirect(signedUrl);
+
+  const fileResponse = await fetch(signedUrl);
+  if (!fileResponse.ok || !fileResponse.body) {
+    return res.status(502).send("Download file unavailable");
+  }
+
+  const fileName = downloadFileName(downloadFile);
+  res.setHeader("Content-Type", fileResponse.headers.get("content-type") || "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  res.setHeader("Cache-Control", "private, no-store");
+
+  const contentLength = fileResponse.headers.get("content-length");
+  if (contentLength) res.setHeader("Content-Length", contentLength);
+
+  const fileBuffer = Buffer.from(await fileResponse.arrayBuffer());
+  res.send(fileBuffer);
 });
 
 connectDb().then(() => {
