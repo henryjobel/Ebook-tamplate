@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Gift, Loader2, Plus, X } from "lucide-react";
+import { Check, Gift, Loader2, PlayCircle, Plus, X } from "lucide-react";
 import { Section, Pill, CtaButton } from "./primitives";
 import { useContent } from "../../context/ContentContext";
 import { createOrder } from "../../lib/api";
@@ -20,11 +20,13 @@ export function Pricing() {
   const toggle = (id: string) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
-  // First product = main product being sold; rest = upsells
-  const primaryProduct = products.find(p => p.type === "ebook") || products[0] || null;
-  const upsellProducts = primaryProduct
-    ? products.filter(p => p._id !== primaryProduct._id)
-    : [];
+  const explicitUpsells = products.filter((p) => p.isUpsell);
+  const primaryProduct = products.find((p) => p.type === "ebook" && !p.isUpsell) || products.find((p) => !p.isUpsell) || products[0] || null;
+  const upsellProducts = explicitUpsells.length
+    ? explicitUpsells
+    : primaryProduct
+      ? products.filter((p) => p._id !== primaryProduct._id)
+      : [];
 
   const mainPrice = primaryProduct ? primaryProduct.price : ebook.price;
   const mainOriginalPrice = primaryProduct && primaryProduct.originalPrice > primaryProduct.price
@@ -38,7 +40,9 @@ export function Pricing() {
     price: p.price,
     oldPrice: p.originalPrice || p.price,
     popular: false,
-    imageUrl: p.imageUrl
+    imageUrl: p.imageUrl,
+    videoUrl: p.videoUrl,
+    youtubeUrl: p.youtubeUrl
   }));
   const allUpsells = [...v2.upsells, ...productUpsells];
 
@@ -162,6 +166,12 @@ export function Pricing() {
                         )}
                       </span>
                       <span className="mt-0.5 block text-sm text-muted-foreground">{u.desc}</span>
+                      {(u.videoUrl || u.youtubeUrl) && (
+                        <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-green/10 px-2.5 py-1 text-xs font-[700] text-green-deep">
+                          <PlayCircle className="h-3.5 w-3.5" />
+                          Video included
+                        </span>
+                      )}
                     </span>
                     <span className="shrink-0 text-right">
                       <span className="block font-[700] text-green-deep">+{toBn(u.price)}৳</span>

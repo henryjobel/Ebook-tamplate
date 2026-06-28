@@ -69,7 +69,7 @@ export interface V2Content {
     copyright: string;
   };
   bonuses: Bonus[];
-  upsells: { id: string; title: string; desc: string; price: number; oldPrice: number; popular?: boolean }[];
+  upsells: { id: string; title: string; desc: string; price: number; oldPrice: number; popular?: boolean; videoUrl?: string; youtubeUrl?: string }[];
 }
 
 export interface Content {
@@ -216,6 +216,9 @@ export interface Product {
   originalPrice: number;
   type: "ebook" | "physical";
   imageUrl?: string;
+  videoUrl?: string;
+  youtubeUrl?: string;
+  isUpsell?: boolean;
   status: string;
 }
 

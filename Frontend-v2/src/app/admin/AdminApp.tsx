@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   BarChart3,
   BookOpen,
   Check,
+  ChevronLeft,
   ChevronRight,
   Download,
   Eye,
@@ -14,6 +15,7 @@ import {
   Package,
   Plus,
   Save,
+  Search,
   Settings,
   ShoppingBag,
   Upload,
@@ -47,7 +49,7 @@ import {
 import { API_URL, Content, DEFAULT_CONTENT, DEFAULT_EBOOK, DEFAULT_PAYMENT, Ebook, Payment } from "../lib/api";
 import { cn } from "../components/ui/utils";
 
-type AdminView = "overview" | "orders" | "products" | "settings" | "cms-core" | "cms-v2";
+type AdminView = "overview" | "orders" | "products" | "upsells" | "settings" | "cms-core" | "cms-v2";
 type AdminState = {
   ebook: Ebook;
   payment: Payment;
@@ -68,6 +70,7 @@ const navItems = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "orders", label: "Orders", icon: ShoppingBag },
   { id: "products", label: "Products", icon: Package },
+  { id: "upsells", label: "Upsell", icon: MousePointerClick },
   { id: "cms-v2", label: "CMS Content", icon: BookOpen },
   { id: "settings", label: "Settings", icon: Settings },
   { id: "cms-core", label: "Legacy CMS", icon: FileText }
@@ -108,6 +111,28 @@ function mergeAdminPayload(payload: any): Partial<AdminState> {
 
 function formatTk(value: any) {
   return `৳${Number(value || 0).toLocaleString("en-US")}`;
+}
+
+function orderNumber(order: any) {
+  const id = String(order._id || order.id || "");
+  return `ORD-${id.slice(-6).toUpperCase() || "NEW"}`;
+}
+
+function formatOrderDate(value: any) {
+  if (!value) return "No date";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  }).format(new Date(value));
+}
+
+function formatOrderTime(value: any) {
+  if (!value) return "No time";
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
 }
 
 function AdminLogin({ onLogin }: { onLogin: (token: string, payload: any) => void }) {
@@ -280,12 +305,12 @@ function TextAreaField({ label, value, onChange }: { label: string; value: any; 
   );
 }
 
-function FileField({ label, name }: { label: string; name: string }) {
+function FileField({ label, name, accept }: { label: string; name: string; accept?: string }) {
   return (
     <Field label={label}>
       <div className="flex items-center gap-3 rounded-md border border-dashed border-[#becdc4] bg-white px-3 py-3 transition hover:border-green/70 hover:bg-green/5">
         <Upload className="size-4 text-[#557067]" />
-        <Input className="border-0 bg-transparent p-0 shadow-none focus-visible:ring-0" type="file" name={name} />
+        <Input className="border-0 bg-transparent p-0 shadow-none focus-visible:ring-0" type="file" name={name} accept={accept} />
       </div>
     </Field>
   );
@@ -318,6 +343,18 @@ function StringListEditor({ label, items, onChange }: { label: string; items: st
 }
 
 type Column = { key: string; label: string; type?: "text" | "textarea" | "number" | "boolean" | "select"; options?: string[] };
+
+const upsellNewItem = { id: "", title: "", desc: "", price: 0, oldPrice: 0, popular: false, videoUrl: "", youtubeUrl: "" };
+const upsellColumns: Column[] = [
+  { key: "id", label: "ID" },
+  { key: "title", label: "Title" },
+  { key: "desc", label: "Description", type: "textarea" },
+  { key: "price", label: "Price", type: "number" },
+  { key: "oldPrice", label: "Old price", type: "number" },
+  { key: "popular", label: "Popular", type: "boolean" },
+  { key: "videoUrl", label: "Video URL" },
+  { key: "youtubeUrl", label: "YouTube URL" }
+];
 
 function ObjectListEditor({
   label,
@@ -604,7 +641,10 @@ function OrdersTable({ orders, readonly, onPatch }: { orders: any[]; readonly?: 
     <Table className="[&_td]:border-[#edf2ef] [&_th]:text-[#60746b]">
       <TableHeader>
         <TableRow>
+          <TableHead>Order</TableHead>
           <TableHead>Customer</TableHead>
+          <TableHead>Date</TableHead>
+          <TableHead>Time</TableHead>
           <TableHead>Payment</TableHead>
           <TableHead>Amount</TableHead>
           <TableHead>Status</TableHead>
@@ -616,9 +656,16 @@ function OrdersTable({ orders, readonly, onPatch }: { orders: any[]; readonly?: 
         {orders.map((order) => (
           <TableRow key={order._id || order.id}>
             <TableCell>
+              <div className="font-semibold text-[#15392f]">{orderNumber(order)}</div>
+              <div className="text-xs text-[#60746b]">{String(order._id || order.id || "").slice(-10)}</div>
+            </TableCell>
+            <TableCell>
               <div className="font-medium">{order.name}</div>
               <div className="text-xs text-[#60746b]">{order.phone}</div>
+              {order.email && <div className="max-w-44 truncate text-xs text-[#60746b]">{order.email}</div>}
             </TableCell>
+            <TableCell>{formatOrderDate(order.createdAt)}</TableCell>
+            <TableCell>{formatOrderTime(order.createdAt)}</TableCell>
             <TableCell>
               <div>{order.method}</div>
               <div className="text-xs text-[#60746b]">{order.transactionId}</div>
@@ -676,20 +723,133 @@ function StatusBadge({ value }: { value: string }) {
 }
 
 function OrdersPanel({ state, patchOrder }: { state: AdminState; patchOrder: (id: string, body: any) => void }) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+  const [payment, setPayment] = useState("all");
+  const [delivery, setDelivery] = useState("all");
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(1);
+
+  const filteredOrders = useMemo(() => {
+    const search = query.trim().toLowerCase();
+    return state.orders.filter((order) => {
+      const searchable = [
+        orderNumber(order),
+        order.name,
+        order.phone,
+        order.email,
+        order.method,
+        order.transactionId,
+        order.status,
+        order.deliveryStatus,
+        order.trackingNumber,
+        formatOrderDate(order.createdAt),
+        formatOrderTime(order.createdAt)
+      ].filter(Boolean).join(" ").toLowerCase();
+
+      const matchesSearch = !search || searchable.includes(search);
+      const matchesStatus = status === "all" || order.status === status;
+      const matchesPayment = payment === "all" || order.method === payment;
+      const matchesDelivery = delivery === "all" || (order.deliveryStatus || "not_required") === delivery;
+      return matchesSearch && matchesStatus && matchesPayment && matchesDelivery;
+    });
+  }, [state.orders, query, status, payment, delivery]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, status, payment, delivery, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * pageSize;
+  const pageOrders = filteredOrders.slice(pageStart, pageStart + pageSize);
+
   return (
     <PanelShell title="Orders" description="Approve payments, update delivery state, and open secure download links.">
       <Card className={panelCardClass}>
         <CardHeader className="border-b border-[#edf2ef] bg-gradient-to-r from-[#fbfdfc] to-white">
-          <CardTitle className="text-[#15392f]">Order Queue</CardTitle>
-          <CardDescription>Change payment and delivery status directly from the table.</CardDescription>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <CardTitle className="text-[#15392f]">Order Queue</CardTitle>
+              <CardDescription>Search, filter, paginate, and manage payment or delivery status.</CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs text-[#60746b]">
+              <Badge variant="outline" className="border-[#d8e7df] bg-white text-[#15392f]">{filteredOrders.length} shown</Badge>
+              <Badge variant="outline" className="border-[#d8e7df] bg-white text-[#15392f]">{state.orders.length} total</Badge>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="p-5"><OrdersTable orders={state.orders} onPatch={patchOrder} /></CardContent>
+        <CardContent className="space-y-4 p-5">
+          <div className="grid gap-3 xl:grid-cols-[minmax(260px,1fr)_160px_160px_180px_130px]">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#60746b]" />
+              <Input
+                className="h-10 border-[#d6e1db] bg-white pl-9 focus-visible:border-green focus-visible:ring-green/20"
+                placeholder="Search order no, customer, phone, email, transaction..."
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </div>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="h-10 border-[#d6e1db] bg-white"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All status</SelectItem>
+                <SelectItem value="pending">pending</SelectItem>
+                <SelectItem value="approved">approved</SelectItem>
+                <SelectItem value="rejected">rejected</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={payment} onValueChange={setPayment}>
+              <SelectTrigger className="h-10 border-[#d6e1db] bg-white"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All payment</SelectItem>
+                <SelectItem value="bkash">bKash</SelectItem>
+                <SelectItem value="nagad">Nagad</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={delivery} onValueChange={setDelivery}>
+              <SelectTrigger className="h-10 border-[#d6e1db] bg-white"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All delivery</SelectItem>
+                <SelectItem value="not_required">not_required</SelectItem>
+                <SelectItem value="processing">processing</SelectItem>
+                <SelectItem value="shipped">shipped</SelectItem>
+                <SelectItem value="delivered">delivered</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
+              <SelectTrigger className="h-10 border-[#d6e1db] bg-white"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10 / page</SelectItem>
+                <SelectItem value="25">25 / page</SelectItem>
+                <SelectItem value="50">50 / page</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <OrdersTable orders={pageOrders} onPatch={patchOrder} />
+
+          <div className="flex flex-col gap-3 border-t border-[#edf2ef] pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-[#60746b]">
+              Showing {filteredOrders.length ? pageStart + 1 : 0}-{Math.min(pageStart + pageSize, filteredOrders.length)} of {filteredOrders.length} orders
+            </p>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" className={softActionButtonClass} disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>
+                <ChevronLeft className="size-4" /> Previous
+              </Button>
+              <span className="min-w-24 text-center text-sm font-medium text-[#15392f]">Page {currentPage} / {totalPages}</span>
+              <Button type="button" variant="outline" size="sm" className={softActionButtonClass} disabled={currentPage >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>
+                Next <ChevronRight className="size-4" />
+              </Button>
+            </div>
+          </div>
+        </CardContent>
       </Card>
     </PanelShell>
   );
 }
 
-function ProductForm({ product, onSubmit, submitLabel }: { product?: any; onSubmit: (form: HTMLFormElement) => void; submitLabel: string }) {
+function ProductForm({ product, onSubmit, submitLabel }: { product?: any; onSubmit: (form: HTMLFormElement) => void; submitLabel: ReactNode }) {
   return (
     <form className="grid gap-4 md:grid-cols-2" onSubmit={(e) => { e.preventDefault(); onSubmit(e.currentTarget); }}>
       {!product && (
@@ -707,12 +867,55 @@ function ProductForm({ product, onSubmit, submitLabel }: { product?: any; onSubm
       <Field label="SKU"><Input name="sku" defaultValue={product?.sku ?? ""} /></Field>
       <Field label="Shipping charge"><Input name="shippingCharge" type="number" defaultValue={product?.shippingCharge ?? 0} /></Field>
       <Field label="Delivery options (comma separated)"><Input name="deliveryOptions" defaultValue={product?.deliveryOptions?.join(", ") ?? ""} placeholder="Courier, Same day, Digital download" /></Field>
+      <label className="flex min-h-10 items-center gap-3 rounded-lg border border-[#edf2ef] bg-[#fbfdfc] px-3 py-2 text-sm font-medium text-[#15392f]">
+        <input type="hidden" name="isUpsell" value="false" />
+        <input
+          type="checkbox"
+          name="isUpsell"
+          value="true"
+          defaultChecked={Boolean(product?.isUpsell)}
+          className="h-4 w-4 rounded border-[#cbd9d2] accent-[#00d084]"
+        />
+        Show this product as an up-sell
+      </label>
+      <Field label="YouTube video link"><Input name="youtubeUrl" type="url" defaultValue={product?.youtubeUrl ?? ""} placeholder="https://youtube.com/watch?v=..." /></Field>
       <div className="md:col-span-2"><Field label="Description"><Textarea name="description" defaultValue={product?.description ?? ""} /></Field></div>
       <div className="md:col-span-2"><Field label="Delivery note"><Textarea name="deliveryNote" defaultValue={product?.deliveryNote ?? ""} /></Field></div>
       <FileField label={product?.imageUrl ? "Replace image (optional)" : "Product image"} name="productImage" />
+      <FileField label={product?.videoUrl ? "Replace video (optional)" : "Product video upload"} name="productVideo" accept="video/*" />
       <FileField label={product?.originalFileName ? `Replace file: ${product.originalFileName}` : "Digital file"} name="productFile" />
       <div className="md:col-span-2"><Button className={primaryButtonClass}>{submitLabel}</Button></div>
     </form>
+  );
+}
+
+function UpsellPanel({ state, setState, saveSettings }: { state: AdminState; setState: React.Dispatch<React.SetStateAction<AdminState>>; saveSettings: (form: HTMLFormElement) => void }) {
+  const upsells = state.content.v2?.upsells || [];
+  const setUpsells = (items: any[]) => {
+    setState((s) => ({
+      ...s,
+      content: {
+        ...s.content,
+        v2: {
+          ...s.content.v2,
+          upsells: items
+        }
+      }
+    }));
+  };
+
+  return (
+    <CmsForm title="Upsell" description="Create and edit the order-bump products shown inside the price card." onSave={saveSettings}>
+      <SectionCard title="Checkout Upsell Products" description="These are the selectable add-ons shown under 'অর্ডারে যোগ করুন' on the storefront.">
+        <ObjectListEditor
+          label="Upsell products"
+          items={upsells}
+          newItem={upsellNewItem}
+          columns={upsellColumns}
+          onChange={setUpsells}
+        />
+      </SectionCard>
+    </CmsForm>
   );
 }
 
@@ -807,7 +1010,13 @@ function ProductsPanel({ state, createProduct, patchProduct, deleteProduct }: {
                         <div>
                           <div className="font-medium">{product.title}</div>
                           {product.isDefault && <span className="text-xs text-orange font-medium">● Main ebook (default)</span>}
-                          {!product.isDefault && <div className="text-xs text-[#60746b]">{product.sku || product.originalFileName || "No SKU"}</div>}
+                          {!product.isDefault && (
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-[#60746b]">
+                              <span>{product.sku || product.originalFileName || "No SKU"}</span>
+                              {product.isUpsell && <Badge className="bg-orange/15 text-orange">Up-sell</Badge>}
+                              {(product.videoUrl || product.youtubeUrl) && <Badge className="bg-blue-50 text-blue-700">Video</Badge>}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </TableCell>
@@ -1092,7 +1301,7 @@ function CmsV2Panel({ state, setState, saveSettings }: { state: AdminState; setS
             <ObjectListEditor label="Bonuses" items={v2.bonuses || []} newItem={{ title: "", text: "", value: 0 }} columns={[{ key: "title", label: "Title" }, { key: "text", label: "Text" }, { key: "value", label: "Value", type: "number" }]} onChange={(v) => setV2("bonuses", v)} />
           </SectionCard>
           <SectionCard title="Order Bumps" description="Optional add-ons customers can select before checkout.">
-            <ObjectListEditor label="Upsells" items={v2.upsells || []} newItem={{ id: "", title: "", desc: "", price: 0, oldPrice: 0, popular: false }} columns={[{ key: "id", label: "ID" }, { key: "title", label: "Title" }, { key: "desc", label: "Description", type: "textarea" }, { key: "price", label: "Price", type: "number" }, { key: "oldPrice", label: "Old price", type: "number" }, { key: "popular", label: "Popular", type: "boolean" }]} onChange={(v) => setV2("upsells", v)} />
+            <ObjectListEditor label="Upsells" items={v2.upsells || []} newItem={upsellNewItem} columns={upsellColumns} onChange={(v) => setV2("upsells", v)} />
           </SectionCard>
           </TabsContent>
           <TabsContent value="footer" className="space-y-4">
@@ -1250,6 +1459,7 @@ export function AdminApp() {
           {active === "overview" && <OverviewPanel state={state} />}
           {active === "orders" && <OrdersPanel state={state} patchOrder={patchOrder} />}
           {active === "products" && <ProductsPanel state={state} createProduct={createProduct} patchProduct={patchProduct} deleteProduct={deleteProduct} />}
+          {active === "upsells" && <UpsellPanel state={state} setState={setState} saveSettings={saveSettings} />}
           {active === "settings" && <SettingsPanel state={state} setState={setState} saveSettings={saveSettings} />}
           {active === "cms-core" && <CmsCorePanel state={state} setState={setState} saveSettings={saveSettings} />}
           {active === "cms-v2" && <CmsV2Panel state={state} setState={setState} saveSettings={saveSettings} />}
